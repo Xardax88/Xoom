@@ -1,0 +1,4 @@
+pygame
+pyvulkan
+psutil
+wmi

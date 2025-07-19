@@ -1,0 +1,21 @@
+# Mapa de prueba para Xoom
+# Formato: x1,y1 x2,y2 x3,y3 x4,y4 (polígonos)
+# Sentido horario = interior, anti-horario = exterior
+
+# Habitación principal (anti-horario) - paredes exteriores
+50,50 950,50 950,650 50,650
+
+# Obstáculo 1 (horario) - pared interior
+200,150 350,150 350,250 200,250
+
+# Obstáculo 2 (horario) - pared interior
+500,300 650,300 650,450 500,450
+
+# Obstáculo 3 (horario) - columna pequeña
+750,100 800,100 800,150 750,150
+
+# Pasillo (anti-horario) - área transitable
+400,500 600,500 600,600 400,600
+
+# Obstáculo en L (horario) - forma compleja
+100,400 250,400 250,450 150,450 150,550 100,550

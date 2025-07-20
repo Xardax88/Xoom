@@ -1,37 +1,56 @@
-#########################################################################
-# settings.py - Configuración global
-#########################################################################
+"""
+settings.py
 
-import os
+Configuraciones globales del proyecto Xoom.
 
-# Configuración de pantalla
-SCREEN_WIDTH = 1024
-SCREEN_HEIGHT = 768
-FPS = 60
+Edita estos valores para ajustar la ventana, FPS, archivo de mapa, FOV del jugador, etc.
+"""
 
-# Configuración del jugador
-PLAYER_SPEED = 100  # pixels por segundo
-PLAYER_ROTATION_SPEED = 180  # grados por segundo
-PLAYER_FOV = 60  # grados
-PLAYER_SIZE = 5  # radio en pixels
+from pathlib import Path
 
-# Colores (RGB)
-BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)
-RED = (255, 0, 0)
-GREEN = (0, 255, 0)
-BLUE = (0, 0, 255)
-YELLOW = (255, 255, 0)
+# --- Paths ---
+BASE_DIR = Path(__file__).resolve().parent
+ASSETS_DIR = BASE_DIR / "assets"
+MAPS_DIR = ASSETS_DIR / "maps"
+LOGS_DIR = BASE_DIR / "logs"
 
-# Configuración del minimapa
-MINIMAP_SCALE = 1
-MINIMAP_POSITION = (10, 10)  # x, y desde la esquina superior izquierda
+# Archivo de mapa por defecto
+DEFAULT_MAP_FILE = MAPS_DIR / "E1M1.xmap"
 
-# Configuración de archivos
-MAPS_DIR = os.path.join("assets", "maps")
-LOGS_DIR = "logs"
+# --- Ventana / Render ---
+WINDOW_WIDTH = 800
+WINDOW_HEIGHT = 600
+FPS_TARGET = 60
 
-# Configuración de logging
-LOG_LEVEL = "DEBUG"  # DEBUG, INFO, WARNING, ERROR
-LOG_TO_FILE = True
-LOG_TO_CONSOLE = True
+# Escala del minimapa (pixeles por unidad de mapa)
+MINIMAP_SCALE = 2.0  # 1 unidad del mapa = 4 px
+
+# Margen del minimapa dentro de la ventana
+MINIMAP_MARGIN = 16
+
+# Color theme override (puede dejarse None para defaults en renderer)
+COLOR_THEME = None
+
+# --- Jugador ---
+PLAYER_START_X = -90.0
+PLAYER_START_Y = 90.0
+PLAYER_START_ANGLE_DEG = 0.0  # 0° = eje +X (derecha)
+PLAYER_FOV_DEG = 60.0  # apertura total del FOV
+PLAYER_FOV_LENGTH = 250.0  # longitud de las líneas de FOV en unidades de mapa
+PLAYER_SPEED = 30.0  # unidades por segundo
+PLAYER_TURN_SPEED_DEG = 5.0  # grados/seg
+
+# --- Logging ---
+LOG_LEVEL = "DEBUG"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+LOG_FILE_BASENAME = "xoom.log"
+LOG_ROTATE_DAILY = True  # si True usa TimedRotatingFileHandler
+LOG_BACKUP_COUNT = 7  # cuantos días conservar
+LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+# --- BSP ---
+BSP_MAX_DEPTH = 32  # seguridad para recursión
+BSP_SPLIT_STRATEGY = "first"  # first | median | longest | random (para evolucionar)
+
+# --- Input ---
+ENABLE_MOUSE_LOOK = False  # placeholder para futuro

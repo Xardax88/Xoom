@@ -24,26 +24,32 @@ Un motor de juego 3D estilo Doom implementado en Python.
 
 ```
 Xoom/
-├── main.py                 # Punto de entrada principal
-├── settings.py            # Configuración global
-├── requirements.txt       # Dependencias
-├── assets/
-│   └── maps/             # Archivos de mapas
-│       └── test_map.txt  # Mapa de prueba
-├── core/                 # Lógica del juego
-│   ├── __init__.py
-│   ├── game.py          # Clase principal del juego
-│   ├── player.py        # Lógica del jugador
-│   ├── map_loader.py    # Cargador de mapas
-│   └── bsp_tree.py      # Árbol de partición binaria
-├── render/               # Sistema de renderizado
-│   ├── __init__.py
-│   ├── renderer.py      # Renderizador principal
-│   └── minimap.py       # Renderizado del minimapa
-└── utils/                # Utilidades
-    ├── __init__.py
-    ├── logger.py        # Sistema de logging
-    └── math_utils.py    # Utilidades matemáticas
+├─ assets/
+│  ├─ maps/
+│  │  └─ E1M1.xmap
+├─ core/
+│  ├─ __init__.py
+│  ├─ bsp.py
+│  ├─ collision.py
+│  ├─ errors.py
+│  ├─ game.py
+│  ├─ map_data.py
+│  ├─ map_loader.py
+│  ├─ match_utils.py
+│  ├─ player.py
+│  ├─ types.py
+│  └─ visibility.py
+├─ logs/
+├─ render/
+│  ├─ __init__.py
+│  ├─ camera.py
+│  ├─ colors.py
+│  ├─ pygame_renderer.py
+│  └─ renderer_base.py
+├─ settings.py
+├─ logging_setup.py
+├─ main.py
+└─ requirements.txt
 ```
 
 ## Instalación
@@ -66,30 +72,36 @@ Los mapas se definen en archivos de texto con el siguiente formato:
 
 ```
 # Comentarios empiezan con #
-# Cada línea define un polígono: x1,y1 x2,y2 x3,y3 x4,y4
+# Los polígonos se definen con coordenadas X Y por cada vértice
+# POLY <nombre>
+# Define un polígono con un nombre específico
+# Las coordenadas son en el formato X Y
+# El polígono termina con END
+# El poligono puede tener mas de 4 vértices
+#
+# SEG <nombre>
+# Define un segmento de línea con un nombre específico
+# Las coordenadas son en el formato X Y
+# El segmento termina con END
+#
+# PLAYER_START Defines la posición inicial del jugador
 
 # Polígonos en sentido horario = paredes interiores (sólidas)
-200,150 350,150 350,250 200,250
+POLY column
+-80 -20
+20 -20
+20 20
+-20 20
+END
 
 # Polígonos en sentido anti-horario = áreas exteriores
-50,50 950,50 950,650 50,650
+POLY wall
+-100 100
+100 100
+100 -100
+-100 -100
+END
 ```
-
-## Principios SOLID Aplicados
-
-1. **Single Responsibility**: Cada clase tiene una responsabilidad específica
-   - `Player`: Maneja solo la lógica del jugador
-   - `MapLoader`: Solo carga mapas
-   - `Renderer`: Solo renderiza
-   
-2. **Open/Closed**: Extensible sin modificar código existente
-   - Interfaces para `ILogger`, `IRenderer`, `IMapLoader`
-   
-3. **Liskov Substitution**: Las implementaciones pueden reemplazar sus interfaces
-   
-4. **Interface Segregation**: Interfaces específicas y pequeñas
-   
-5. **Dependency Inversion**: Dependencias a través de interfaces
 
 ## Configuración
 
@@ -120,11 +132,3 @@ Los logs se guardan en la carpeta `logs/` con timestamp diario.
 - Efectos de iluminación
 - Soporte para sprites
 - Audio espacial
-
-## Contribuir
-
-1. Fork del proyecto
-2. Crear rama feature (`git checkout -b feature/nueva-caracteristica`)
-3. Commit cambios (`git commit -am 'Agregar nueva característica'`)
-4. Push a la rama (`git push origin feature/nueva-caracteristica`)
-5. Crear Pull Request

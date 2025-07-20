@@ -1,70 +1,49 @@
-#########################################################################
-# core/player.py - Clase que representa al jugador
-#########################################################################
+"""
+Definición del jugador.
+"""
 
+from __future__ import annotations
+from dataclasses import dataclass
 import math
-from typing import Tuple
-from utils.math_utils import Vector2D, MathUtils
+from .types import Vec2
 
 
+@dataclass
 class Player:
-    """Representa al jugador en el juego siguiendo el principio de Responsabilidad Única"""
-
-    def __init__(self, x: float, y: float, angle: float = 0.0):
-        self.x = x
-        self.y = y
-        self.angle = angle  # en grados
-        self.speed = 0.0
-        self.rotation_speed = 0.0
+    x: float
+    y: float
+    angle_deg: float
+    fov_deg: float
+    fov_length: float
 
     @property
-    def position(self) -> Vector2D:
-        """Obtener la posición actual del jugador"""
-        return (self.x, self.y)
+    def pos(self) -> Vec2:
+        return Vec2(self.x, self.y)
 
     @property
-    def direction_vector(self) -> Vector2D:
-        """Obtener el vector de dirección basado en el ángulo actual"""
-        rad = MathUtils.degrees_to_radians(self.angle)
-        return (math.cos(rad), math.sin(rad))
+    def angle_rad(self) -> float:
+        """Ángulo actual en radianes (derivado de angle_deg)."""
+        return math.radians(self.angle_deg)
 
-    def update(self, delta_time: float) -> None:
-        """Actualizar la posición del jugador"""
-        if self.speed != 0:
-            direction = self.direction_vector
-            self.x += direction[0] * self.speed * delta_time
-            self.y += direction[1] * self.speed * delta_time
+    def rotate(self, delta_deg: float) -> None:
+        self.angle_deg = (self.angle_deg + delta_deg) % 360.0
 
-        if self.rotation_speed != 0:
-            self.angle += self.rotation_speed * delta_time
-            self.angle = MathUtils.normalize_angle(self.angle)
+    def move(self, dx: float, dy: float) -> None:
+        self.x += dx
+        self.y += dy
 
-    def set_movement(self, speed: float) -> None:
-        """Establecer la velocidad de movimiento"""
-        self.speed = speed
+    def forward_vector(self) -> Vec2:
+        rad = math.radians(self.angle_deg)
+        return Vec2(math.cos(rad), math.sin(rad))
 
-    def set_rotation(self, rotation_speed: float) -> None:
-        """Establecer la velocidad de rotación"""
-        self.rotation_speed = rotation_speed
-
-    def get_fov_lines(
-        self, fov_angle: float, length: float = 100
-    ) -> Tuple[Vector2D, Vector2D]:
-        """Obtener las líneas que representan el campo de visión"""
-        half_fov = fov_angle / 2
-
-        # Línea izquierda del FOV
-        left_angle = MathUtils.degrees_to_radians(self.angle - half_fov)
-        left_end = (
-            self.x + math.cos(left_angle) * length,
-            self.y + math.sin(left_angle) * length,
+    def fov_edges(self) -> tuple[Vec2, Vec2]:
+        """Devuelve los extremos del FOV como puntos en mundo."""
+        half = self.fov_deg / 2.0
+        a1 = math.radians(self.angle_deg - half)
+        a2 = math.radians(self.angle_deg + half)
+        return (
+            Vec2(self.x + math.cos(a1) * self.fov_length,
+                 self.y + math.sin(a1) * self.fov_length),
+            Vec2(self.x + math.cos(a2) * self.fov_length,
+                 self.y + math.sin(a2) * self.fov_length),
         )
-
-        # Línea derecha del FOV
-        right_angle = MathUtils.degrees_to_radians(self.angle + half_fov)
-        right_end = (
-            self.x + math.cos(right_angle) * length,
-            self.y + math.sin(right_angle) * length,
-        )
-
-        return (left_end, right_end)

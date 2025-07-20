@@ -1,45 +1,78 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-#########################################################################
-## Xoom - A Doom like game engine
-#########################################################################
-## License: MIT License
-#########################################################################
-## Author: Xardax
-## Date: 2025-06-19
-## Version: 0.1.0
-## Python Version: 3.11
-## Description:
-##      This is the main entry point for the Xoom game engine.
-#########################################################################
+"""
+main.py
+
+Xoom - A Doom like game engine
+
+Carga settings, configura logging, carga el mapa, construye el BSP y lanza el loop de render.
+
+Author: Xardax
+Date: 2025-06-19
+Version: 0.1.0
+"""
+
+from __future__ import annotations
 
 import sys
-import os
+import logging
 
-# Agregar el directorio raíz al path para imports
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import settings
+from logging_setup import configure_logging
 
+from core.map_loader import FileMapLoader
+from core.bsp import BSPBuilder
+from core.player import Player
 from core.game import Game
-from utils.logger import get_logger
+from render.pygame_renderer import PygameRenderer
+
+logger = logging.getLogger(__name__)
 
 
-def main():
-    """Función principal"""
-    logger = get_logger()
-    logger.info("=== Iniciando Xoom ===")
+def run() -> None:
+    configure_logging()
+    logger.info("Iniciando Xoom...")
 
-    try:
-        game = Game()
-        game.run()
-    except KeyboardInterrupt:
-        logger.info("Juego interrumpido por el usuario")
-    except Exception as e:
-        logger.error(f"Error fatal: {str(e)}")
-        sys.exit(1)
+    # 1. Cargar mapa
+    loader = FileMapLoader()
+    map_data = loader.load(settings.DEFAULT_MAP_FILE)
+    logger.info("Mapa cargado: %s segmentos", len(map_data.segments))
 
-    logger.info("=== Xoom terminado ===")
+    # 2. Construir BSP
+    bsp_builder = BSPBuilder(
+        max_depth=settings.BSP_MAX_DEPTH, strategy=settings.BSP_SPLIT_STRATEGY
+    )
+    bsp_root = bsp_builder.build(map_data.segments)
+    logger.info("BSP construido.")
+
+    # 3. Inicializar jugador
+    player = Player(
+        x=settings.PLAYER_START_X,
+        y=settings.PLAYER_START_Y,
+        angle_deg=settings.PLAYER_START_ANGLE_DEG,
+        fov_deg=settings.PLAYER_FOV_DEG,
+        fov_length=settings.PLAYER_FOV_LENGTH,
+    )
+
+    # 4. Renderer
+    renderer = PygameRenderer(
+        width=settings.WINDOW_WIDTH,
+        height=settings.WINDOW_HEIGHT,
+        fps=settings.FPS_TARGET,
+        scale=settings.MINIMAP_SCALE,
+        margin=settings.MINIMAP_MARGIN,
+        color_theme=settings.COLOR_THEME,
+    )
+
+    # 5. Game loop
+    game = Game(map_data=map_data, bsp_root=bsp_root, player=player, renderer=renderer)
+    game.run()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        run()
+    except KeyboardInterrupt:
+        print("\nSaliendo...")
+        sys.exit(0)

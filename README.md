@@ -2,7 +2,6 @@
 
 Un motor de juego 3D estilo Doom implementado en Python.
 
-![GitHub branch status](https://img.shields.io/github/checks-status/Xardax88/Xoom/master)
 ![Status](https://img.shields.io/badge/status-En%20Desarrollo-blue)
 ![Tamaño del Repo](https://img.shields.io/github/repo-size/Xardax88/Xoom)
 [![Licencia](https://img.shields.io/github/license/Xardax88/Xoom)](LICENSE)

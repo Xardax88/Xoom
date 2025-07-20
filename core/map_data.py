@@ -10,6 +10,7 @@ from .types import Segment
 
 @dataclass
 class MapData:
+    """Contiene los segmentos del mapa y sus límites."""
     segments: List[Segment] = field(default_factory=list)
 
     def add_segment(self, seg: Segment) -> None:

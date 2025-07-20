@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class IMapLoader(ABC):
+    """Interfaz para cargadores de mapas."""
     @abstractmethod
     def load(self, path: Path) -> MapData:  # pragma: no cover - interface
         ...

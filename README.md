@@ -1,23 +1,27 @@
-# Xoom - Motor Estilo Doom en Python
+# Xoom - Motor Estilo Doom en Python 🐍
 
 Un motor de juego 3D estilo Doom implementado en Python.
 
+![GitHub branch status](https://img.shields.io/github/checks-status/Xardax88/Xoom/master)
 ![Status](https://img.shields.io/badge/status-En%20Desarrollo-blue)
-![Tamaño del Repo](https://img.shields.io/github/repo-size/Xardax88/DiamiPyBot)
-[![Licencia](https://img.shields.io/github/license/Xardax88/DiamiPyBot)](LICENSE)
+![Tamaño del Repo](https://img.shields.io/github/repo-size/Xardax88/Xoom)
+[![Licencia](https://img.shields.io/github/license/Xardax88/Xoom)](LICENSE)
 ![Python Version](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)
-[![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg?logo=Black)](https://github.com/psf/black)
+[![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 ![PyGame Version](https://img.shields.io/badge/PyGame-2.6+-blue?logo=pygame&logoColor=white)
 ![SDL Version](https://img.shields.io/badge/SDL-2.28+-blue?logo=libsdl&logoColor=white)
 
+## Descripción
 
+El objetivo es recrear la experiencia de juegos clásicos como Doom, Duke Nukem 3D y Quake, utilizando técnicas de renderizado 2.5D y un sistema de mapas basado en polígonos. 
+Además de poner a prueba mis habilidades de programación en Python, PyGame, OpenGL, Vulkan y SDL.
+
+En su momento, realize un proyecto similar en C++, pero desgraciadamente se perdió el código fuente. Asi que esta vez lo estoy haciendo desde cero en Python aplicando lo aprendido, y guardando mi avance en GitHub.
 
 ## Características
 
 - **Carga de mapas por vectores**: Los mapas se definen como polígonos usando coordenadas 2D
 - **Árbol BSP**: Partición binaria del espacio para renderizado eficiente
-- **Minimapa en tiempo real**: Visualización del mapa y posición del jugador
-- **Campo de visión (FOV)**: Representación visual del área que ve el jugador
 - **Sistema de logging**: Registro completo de eventos y errores
 
 ## Estructura del Proyecto
@@ -60,15 +64,17 @@ Xoom/
 
 ## Controles
 
-- **W/↑**: Mover adelante
-- **S/↓**: Mover atrás  
-- **A/←**: Girar izquierda
-- **D/→**: Girar derecha
+- **W**: Mover adelante
+- **S**: Mover atrás  
+- **A**: Girar izquierda
+- **D**: Girar derecha
+- **Q**: Desplazamiento lateral izquierda
+- **E**: Desplazamiento lateral derecha
 - **ESC**: Salir
 
 ## Formato de Mapas
 
-Los mapas se definen en archivos de texto con el siguiente formato:
+Los mapas se definen en archivos de .xmap con el siguiente formato:
 
 ```
 # Comentarios empiezan con #
@@ -85,6 +91,8 @@ Los mapas se definen en archivos de texto con el siguiente formato:
 # El segmento termina con END
 #
 # PLAYER_START Defines la posición inicial del jugador
+
+PLAYER_START -10 20
 
 # Polígonos en sentido horario = paredes interiores (sólidas)
 POLY column
@@ -122,13 +130,14 @@ El sistema registra automáticamente:
 - Eventos de inicialización
 - Errores de renderizado
 
-Los logs se guardan en la carpeta `logs/` con timestamp diario.
+Los logs se guardan en la carpeta `logs/` con timestamp.
 
 ## Próximas Características
 
 - Renderizado 3D completo
 - Texturas en paredes
-- Detección de colisiones
+- Texturas techos y suelos
+- Soporte para enemigos y objetos
 - Efectos de iluminación
 - Soporte para sprites
 - Audio espacial

@@ -23,28 +23,28 @@ WINDOW_HEIGHT = 600
 FPS_TARGET = 60
 
 # Escala del minimapa (pixeles por unidad de mapa)
-MINIMAP_SCALE = 2.0  # 1 unidad del mapa = 4 px
+MINIMAP_SCALE = 2.0
 
 # Margen del minimapa dentro de la ventana
 MINIMAP_MARGIN = 16
 
-# Color theme override (puede dejarse None para defaults en renderer)
+# Color theme override
 COLOR_THEME = None
 
 # --- Jugador ---
 PLAYER_START_X = -90.0
 PLAYER_START_Y = 90.0
-PLAYER_START_ANGLE_DEG = 0.0  # 0° = eje +X (derecha)
-PLAYER_FOV_DEG = 60.0  # apertura total del FOV
-PLAYER_FOV_LENGTH = 250.0  # longitud de las líneas de FOV en unidades de mapa
-PLAYER_SPEED = 30.0  # unidades por segundo
-PLAYER_TURN_SPEED_DEG = 5.0  # grados/seg
+PLAYER_START_ANGLE_DEG = 0.0
+PLAYER_FOV_DEG = 60.0
+PLAYER_FOV_LENGTH = 250.0
+PLAYER_SPEED = 30.0
+PLAYER_TURN_SPEED_DEG = 5.0
 
 # --- Logging ---
 LOG_LEVEL = "DEBUG"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 LOG_FILE_BASENAME = "xoom.log"
-LOG_ROTATE_DAILY = True  # si True usa TimedRotatingFileHandler
-LOG_BACKUP_COUNT = 7  # cuantos días conservar
+LOG_ROTATE_DAILY = True
+LOG_BACKUP_COUNT = 1
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 

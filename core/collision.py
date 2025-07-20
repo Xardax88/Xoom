@@ -7,6 +7,14 @@ from core.bsp import BSPNode
 from core.math_utils import line_side
 
 class CollisionDetector:
+    """
+    Detecta colisiones entre segmentos y un árbol BSP.
+
+    Args:
+        bsp_root (BSPNode): Raíz del árbol BSP que representa el mapa.
+    return:
+        Vec2 | None: El primer punto de colisión encontrado, o None si no hay colisiones.
+    """
     def __init__(self, bsp_root: BSPNode):
         self.bsp_root = bsp_root
 

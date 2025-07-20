@@ -18,7 +18,7 @@ from . import colors
 
 logger = logging.getLogger(__name__)
 
-
+# ---- Mapeo de teclas -----
 _KEYMAP = {
     pygame.K_ESCAPE: ("quit", True),
     pygame.K_a: ("turn", -PLAYER_TURN_SPEED_DEG),
@@ -30,7 +30,20 @@ _KEYMAP = {
 }
 
 
+# ---- Renderer Pygame -----
 class PygameRenderer(IRenderer):
+    """
+    Renderer que usa Pygame para mostrar un minimapa 2D simple.
+
+    Args:
+        width (int): Ancho de la ventana.
+        height (int): Alto de la ventana.
+        fps (int): Frames por segundo para el renderizado.
+        scale (float): Escala del minimapa.
+        margin (int): Margen alrededor del minimapa.
+        color_theme (Optional[Dict[str, Any]]): Tema de colores personalizado, si se desea.
+    """
+
     def __init__(
         self,
         width: int,

@@ -27,6 +27,13 @@ class BSPNode:
 
 
 class BSPBuilder:
+    """
+    Constructor de un árbol BSP 2D.
+
+    Arg:
+        max_depth (int): Profundidad máxima del árbol. Por defecto 32.
+        strategy (str): Estrategia de selección de partición. Puede ser "first" o "random".
+    """
     def __init__(self, max_depth: int = 32, strategy: str = "first") -> None:
         self.max_depth = max_depth
         self.strategy = strategy

@@ -25,7 +25,10 @@ class Vec2:
     __rmul__ = __mul__
 
     def length(self) -> float:
-        return math.sqrt(self.x * self.x + self.y * self.y)
+        dx = self.x - 0.0
+        dy = self.y - 0.0
+        return math.sqrt(dx * dx + dy * dy)
+
 
 @dataclass(frozen=True)
 class Segment:
@@ -43,7 +46,7 @@ class Segment:
         Si no se proporciona un segmento original asigna uno
         """
         if self.original_segment is None:
-            object.__setattr__(self, 'original_segment', self)
+            object.__setattr__(self, "original_segment", self)
 
     def length(self) -> float:
         dx = self.b.x - self.a.x

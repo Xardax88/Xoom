@@ -27,7 +27,6 @@ from core.bsp import BSPBuilder
 from core.player import Player
 from core.game import Game
 from render.glfw_render import GLFW_OpenGLRenderer
-from render.texture_manager import TextureManager
 
 
 logger = logging.getLogger(__name__)
@@ -43,10 +42,6 @@ def run() -> None:
 
     # Crear la ventana y el contexto de renderizado PRIMERO
     logger.info("Inicializando renderer y creando la ventana...")
-    # Inicializar gestor de Texturas
-    logger.info("Inicializando gestor de texturas...")
-    texture_manager = TextureManager()
-    texture_manager.load_texture(settings.DEFAULT_WALL_TEXTURE, "wall_placeholder")
 
     # Crear la ventana y el contexto de renderizado PRIMERO
     logger.info("Inicializando renderer y creando la ventana...")
@@ -54,7 +49,6 @@ def run() -> None:
         width=settings.WINDOW_WIDTH,
         height=settings.WINDOW_HEIGHT,
         caption="Xoom Engine",
-        texture_manager=texture_manager,  # Inyectar
         color_theme=settings.COLOR_THEME,
         scale=settings.MINIMAP_SCALE,
     )
@@ -64,7 +58,7 @@ def run() -> None:
     logger.info(
         f"""
     ==================================================
-    Xoom - A Doom like game engine 
+    Xoom - A Doom like game engine
     Author: Xardax
     Date relace: 2025-06-19
     Version: 0.1.0
@@ -79,8 +73,6 @@ def run() -> None:
     ==================================================
     """
     )
-
-
 
     # Cargar los datos del mapa
     logger.info("Cargando datos del mapa...")
@@ -107,7 +99,12 @@ def run() -> None:
     logger.info("Jugador inicializado en la posición: %s", player.pos)
 
     # Crear la instancia del juego con todos los componentes listos
-    game = Game(map_data=map_data, bsp_root=bsp_root, player=player, renderer=renderer)
+    game = Game(
+        map_data=map_data,
+        bsp_root=bsp_root,
+        player=player,
+        renderer=renderer,
+    )
 
     # Iniciar el bucle principal del juego
     game.run()

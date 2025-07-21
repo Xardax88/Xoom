@@ -1,5 +1,5 @@
 """
-Renderizador basado en GLFW y PyOpenGL para un minimapa 2D.
+render/glfw_render.py
 """
 
 from __future__ import annotations
@@ -32,13 +32,6 @@ from OpenGL.GL import (
     glEnable,
     glDisable,
     GL_DEPTH_TEST,
-    glBindTexture,
-    glTexCoord2f,
-    glTexParameteri,
-    glTexParameterf,
-    GL_TEXTURE_2D,
-    GL_TEXTURE_MIN_FILTER,
-    GL_LINEAR_MIPMAP_LINEAR,
 )
 from OpenGL.GLU import gluPerspective
 from OpenGL.raw.GL.VERSION.GL_1_0 import glRotatef
@@ -50,7 +43,7 @@ import settings
 from .renderer_base import IRenderer
 from .glfw_camera import Camera2D
 from . import colors
-from .texture_manager import Texture
+
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +76,6 @@ class GLFW_OpenGLRenderer(IRenderer):
         width: int,
         height: int,
         caption: str,
-        texture_manager: TextureManager,  # Inyectar el gestor
         scale: float = 1.0,
         color_theme: Optional[Dict[str, Any]] = None,
     ) -> None:
@@ -92,8 +84,6 @@ class GLFW_OpenGLRenderer(IRenderer):
 
         self.width = width
         self.height = height
-
-        self.texture_manager = texture_manager
 
         self.window = glfw.create_window(width, height, caption, None, None)
         if not self.window:
@@ -105,9 +95,7 @@ class GLFW_OpenGLRenderer(IRenderer):
 
         try:
             self.gl_version = glGetString(GL_VERSION).decode()
-            # logger.info("OpenGL version: %s", self.gl_version)
         except Exception as e:
-            # logger.warning("No se pudo obtener la versión de OpenGL: %s", e)
             self.gl_version = "Unknown"
 
         glfw.set_window_size_callback(self.window, self._on_resize)
@@ -122,17 +110,19 @@ class GLFW_OpenGLRenderer(IRenderer):
         # Coordenadas de textura
         u1 = seg.u_offset / settings.TEXTURE_SCALE
         u2 = (seg.u_offset + seg.length()) / settings.TEXTURE_SCALE
-        v1, v2 = 0.0, wall_height / (settings.TEXTURE_SCALE * 2) # Ajustar escala vertical si es necesario
+        v1, v2 = 0.0, wall_height / (
+            settings.TEXTURE_SCALE * 2
+        )  # Ajustar escala vertical si es necesario
 
         # Vértices del muro
         p1 = seg.a
         p2 = seg.b
 
         # Cara frontal
-        glTexCoord2f(u1, v1); glVertex3f(p1.x, -half_height, p1.y)
-        glTexCoord2f(u2, v1); glVertex3f(p2.x, -half_height, p2.y)
-        glTexCoord2f(u2, v2); glVertex3f(p2.x,  half_height, p2.y)
-        glTexCoord2f(u1, v2); glVertex3f(p1.x,  half_height, p1.y)
+        glVertex3f(p1.x, -half_height, p1.y)
+        glVertex3f(p2.x, -half_height, p2.y)
+        glVertex3f(p2.x, half_height, p2.y)
+        glVertex3f(p1.x, half_height, p1.y)
 
     def get_opengl_version(self) -> str:
         """
@@ -183,8 +173,6 @@ class GLFW_OpenGLRenderer(IRenderer):
                     state[action] += value
         return state
 
-
-
     def draw_frame(
         self,
         map_data: MapData,
@@ -200,18 +188,11 @@ class GLFW_OpenGLRenderer(IRenderer):
 
         self._setup_3d_projection(player)
         self._draw_3d_world(player, visible_segments)
+        self._draw_grid()
 
         if settings.ENABLE_MINIMAP:
             self._setup_2d_projection()
             self._draw_2d_minimap(map_data, player, visible_segments)
-
-        # Actualizar la cámara para centrarse en el jugador
-        # self.camera.set_target(player.x, player.y)
-        # self.camera.apply_transform()
-        # glLoadIdentity()
-        # Dibujar el mapa
-        # self._draw_map(map_data, visible_segments)
-        # self._draw_player(player)
 
     def _setup_3d_projection(self, player: Player) -> None:
         """
@@ -223,7 +204,6 @@ class GLFW_OpenGLRenderer(IRenderer):
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
 
-        # width, height = glfw.get_window_size(self.window)
         aspect_ratio = self.width / self.height if self.height > 0 else 1.0
 
         horizontal_fov_rad = math.radians(player.fov_deg)
@@ -232,7 +212,6 @@ class GLFW_OpenGLRenderer(IRenderer):
         )
         vertical_fov_deg = math.degrees(vertical_fov_rad)
 
-        # gluPerspective(player.fov_deg, aspect_ratio, 0.1, 2000.0)
         gluPerspective(vertical_fov_deg, aspect_ratio, 0.1, 2000.0)
 
     def _setup_2d_projection(self) -> None:
@@ -261,99 +240,62 @@ class GLFW_OpenGLRenderer(IRenderer):
         glLoadIdentity()
 
         glRotatef(player.angle_deg + 90, 0.0, 1.0, 0.0)
-        glTranslatef(-player.x, settings.PLAYER_HEIGHT, -player.y)
+        glTranslatef(-player.x, -settings.PLAYER_HEIGHT, -player.y)
 
         # Dibujar las paredes visibles
         if visible_segments:
-            # Agrupar segmentos por textura para optimizar cambios de estado de OpenGL
-            segments_by_texture: Dict[Optional[str], list[Segment]] = {}
             for seg in visible_segments:
-                tex_name = seg.texture_name
-                if tex_name not in segments_by_texture:
-                    segments_by_texture[tex_name] = []
-                segments_by_texture[tex_name].append(seg)
-
-            # Iterar sobre cada grupo de textura
-            for texture_name, segments_group in segments_by_texture.items():
-                texture = self.texture_manager.get_texture(texture_name) if texture_name else None
-
-                if texture:
-                    glEnable(GL_TEXTURE_2D)
-                    glBindTexture(GL_TEXTURE_2D, texture.id)
-                    glColor3f(1.0, 1.0, 1.0)  # Blanco para no teñir la textura
-                else:
-                    glDisable(GL_TEXTURE_2D)
-                    # Color de fallback si no hay textura
-                    wall_color = self.theme.get("walls", (200, 200, 200))
-                    glColor3f(wall_color[0] / 255.0, wall_color[1] / 255.0, wall_color[2] / 255.0)
-
-                # Dibujar todos los segmentos que usan esta textura
-                glBegin(GL_QUADS)
-                for seg in segments_group:
-                    self._draw_3d_wall(seg)
-                glEnd()
-
-            # Restaurar estado
-            glDisable(GL_TEXTURE_2D)
+                self._draw_3d_wall(seg)
 
     def _draw_3d_wall(self, seg: Segment) -> None:
         """
         Dibuja una pared en 3D.
-        Args:
-           seg: El segmento de la pared.
         """
 
-        h = settings.WALL_HEIGHT / 2.0
-        if not self.wall_texture:
-            color = self.theme.get("wall_interior", (255, 255, 255))
-            dim_factor = 0.8
-            glColor3f(
-                color[0] / 255.0 * dim_factor,
-                color[1] / 255.0 * dim_factor,
-                color[2] / 255.0 * dim_factor,
-            )
-            # Si no hay textura, no necesitamos hacer más aquí
-            glBegin(GL_QUADS)
-            glVertex3f(seg.a.x, -h, seg.a.y)
-            glVertex3f(seg.b.x, -h, seg.b.y)
-            glVertex3f(seg.b.x, h, seg.b.y)
-            glVertex3f(seg.a.x, h, seg.a.y)
-            glEnd()
-            return
+        h = settings.WALL_HEIGHT
 
-        original = seg.original_segment
-        if not original:
-            return
-
-        texture_world_width = settings.WALL_HEIGHT * settings.TEXTURE_SCALE
-        if texture_world_width == 0:
-            return
-
-        dist_from_origin_start = (seg.a - original.a).length()
-
-        u_offset_start = original.u_offset + dist_from_origin_start
-        u_start = u_offset_start / texture_world_width
-        u_end = (u_offset_start + seg.length()) / texture_world_width
+        color = self.theme.get("wall_interior", (255, 255, 255))
+        dim_factor = 0.8
+        glColor3f(
+            color[0] / 255.0 * dim_factor,
+            color[1] / 255.0 * dim_factor,
+            color[2] / 255.0 * dim_factor,
+        )
 
         glBegin(GL_QUADS)
         # Vertices en el plano XZ, altura en Y
 
         # Abajo-Izquierda
-        glTexCoord2f(u_start, 0.0)
-        glVertex3f(seg.a.x, -h, seg.a.y)
+        glVertex3f(seg.a.x, 0, seg.a.y)
 
         # Abajo-Derecha
-        glTexCoord2f(u_end, 0.0)
-        glVertex3f(seg.b.x, -h, seg.b.y)
+        glVertex3f(seg.b.x, 0, seg.b.y)
 
         # Arriba-Derecha
-        glTexCoord2f(u_end, 1.0)
         glVertex3f(seg.b.x, h, seg.b.y)
 
         # Arriba-Izquierda
-        glTexCoord2f(u_start, 1.0)
         glVertex3f(seg.a.x, h, seg.a.y)
 
+        glEnd()
+
+    def _draw_grid(self) -> None:
+        """Dibuja una grilla en el plano XZ."""
+        grid_color = colors.GRAY  # Usar el color gris definido
+        glColor3f(grid_color[0] / 255.0, grid_color[1] / 255.0, grid_color[2] / 255.0)
+        glLineWidth(1.2)  # Grosor de las líneas de la grilla
+        grid_size = 50  # Espaciado entre líneas de la grilla
+        max_grid = 1000  # Extensión de la grilla
+
+        glBegin(GL_LINES)
+        for i in range(-max_grid, max_grid + grid_size, grid_size):
+            # Líneas verticales (eje X)
+            glVertex3f(i, 0, -max_grid)
+            glVertex3f(i, 0, max_grid)
+
+            # Líneas horizontales (eje Z)
+            glVertex3f(-max_grid, 0, i)
+            glVertex3f(max_grid, 0, i)
         glEnd()
 
     def _draw_2d_minimap(
@@ -370,14 +312,8 @@ class GLFW_OpenGLRenderer(IRenderer):
             visible_segments: Segmentos visibles.
         """
 
-        # Desavilitar el test de profundidad
+        # Deshabilitar el test de profundidad
         glDisable(GL_DEPTH_TEST)
-
-        # Configurar matrix Ortogafica
-        # glMatrixMode(GL_PROJECTION)
-        # glLoadIdentity()
-        # width, height = glfw.get_window_size(self.window)
-        # glOrtho(0, width, 0, height, -1, 1)
 
         # Configurar matrix de vista
         glMatrixMode(GL_MODELVIEW)
@@ -404,7 +340,7 @@ class GLFW_OpenGLRenderer(IRenderer):
         logger.info("Cerrando GLFW.")
         glfw.terminate()
 
-    # --- Métodos de dibujo internos (usando OpenGL) ---
+    # Métodos de dibujo internos (usando OpenGL)
 
     def _draw_map(
         self, map_data: MapData, visible_segments: Optional[Iterable[Segment]]

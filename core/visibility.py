@@ -38,57 +38,41 @@ def compute_visible_segments(
     for seg in ordered:
         clipped_list = _clip_segment_to_triangle_multi(seg, tri)
         for clipped in clipped_list:
-            if _seg_min_dist2_to_point(clipped, pos) > max_d2:
-                continue
             # Calcular ángulos de los extremos respecto al jugador
-            a1 = math.atan2(clipped.a.y - pos.y, clipped.a.x - pos.x)
-            a2 = math.atan2(clipped.b.y - pos.y, clipped.b.x - pos.x)
-            # Normalizar a [-pi, pi]
-            a1 = _angle_diff(a1, ang) + ang
-            a2 = _angle_diff(a2, ang) + ang
-
-            interp_a, interp_b = clipped.a, clipped.b
-            if a1 > a2:
-                a1, a2 = a2, a1
-                interp_a, interp_b = interp_b, interp_a
-
-            seg_start = min(a1, a2)
-            seg_end = max(a1, a2)
+            da = math.atan2(clipped.a.y - pos.y, clipped.a.x - pos.x)
+            db = math.atan2(clipped.b.y - pos.y, clipped.b.x - pos.x)
+            a0 = _angle_diff(da, ang)
+            a1 = _angle_diff(db, ang)
+            seg_start = min(a0, a1)
+            seg_end = max(a0, a1)
             # Recortar al FOV
-            fov_start = ang - half
-            fov_end = ang + half
-            seg_start = max(seg_start, fov_start)
-            seg_end = min(seg_end, fov_end)
+            seg_start = max(seg_start, -half)
+            seg_end = min(seg_end, half)
             if seg_end <= seg_start:
                 continue
-            # Recortar contra intervalos cubiertos
+            # Restar intervalos ya cubiertos
             intervals = _subtract_intervals((seg_start, seg_end), covered)
-            for istart, iend in intervals:
-                # Interpolar puntos visibles sobre el segmento
-                denominator = a2 - a1
-                # t0 = (istart - a1) / (a2 - a1) if a2 != a1 else 0.0
-                # t1 = (iend - a1) / (a2 - a1) if a2 != a1 else 1.0
-                t0 = (istart - a1) / denominator if denominator != 0 else 0.0
-                t1 = (iend - a1) / denominator if denominator != 0 else 1.0
-                p0 = Vec2(
-                    interp_a.x + (interp_b.x - interp_a.x) * t0,
-                    interp_a.y + (interp_b.y - interp_a.y) * t0,
-                    )
-                p1 = Vec2(
-                    interp_a.x + (interp_b.x - interp_a.x) * t1,
-                    interp_a.y + (interp_b.y - interp_a.y) * t1,
-                    )
+            for ia, ib in intervals:
+                # Interpolar los puntos recortados
+                t0 = (ia - a0) / (a1 - a0) if a1 != a0 else 0.0
+                t1 = (ib - a0) / (a1 - a0) if a1 != a0 else 1.0
+                p0 = _lerp_vec2(clipped.a, clipped.b, t0)
+                p1 = _lerp_vec2(clipped.a, clipped.b, t1)
+                # Calcular u_offset de cada extremo respecto al segmento original
+                u0 = _interpolate_u_offset(seg.original_segment, p0)
+                u1 = _interpolate_u_offset(seg.original_segment, p1)
                 visible.append(
                     Segment(
                         p0,
                         p1,
                         clipped.interior_facing,
+                        u_offset=u0,
+                        texture_name=seg.original_segment.texture_name,
+                        height=seg.original_segment.height,
                         original_segment=seg.original_segment,
                     )
                 )
-
-                covered.append((istart, iend))
-            # Unir y ordenar intervalos cubiertos para eficiencia
+                covered.append((ia, ib))
             covered = _merge_intervals(covered)
     return visible
 
@@ -308,3 +292,22 @@ def _segments_intersect(a1: Vec2, a2: Vec2, b1: Vec2, b2: Vec2) -> bool:
 
 def _on_segment(a: Vec2, b: Vec2, c: Vec2) -> bool:
     return min(a.x, c.x) <= b.x <= max(a.x, c.x) and min(a.y, c.y) <= b.y <= max(a.y, c.y)
+
+# ---------------------------------------------------------------------------
+def _lerp_vec2(a: Vec2, b: Vec2, t: float) -> Vec2:
+    """Interpolación lineal entre dos Vec2."""
+    return Vec2(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+
+def _interpolate_u_offset(original: Segment, p: Vec2) -> float:
+    """
+    Proyecta el punto p sobre el segmento original y calcula el u_offset correspondiente.
+    """
+    ax, ay = original.a.x, original.a.y
+    bx, by = original.b.x, original.b.y
+    dx, dy = bx - ax, by - ay
+    length = math.hypot(dx, dy)
+    if length == 0:
+        return original.u_offset
+    t = ((p.x - ax) * dx + (p.y - ay) * dy) / (length * length)
+    t = max(0.0, min(1.0, t))
+    return original.u_offset + t * length

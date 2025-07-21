@@ -33,6 +33,8 @@ Xoom/
 ├─ assets/
 │  ├─ maps/
 │  │  └─ E1M1.xmap
+│  ├─ textures/
+│  │  └─ wall_placeholder.png
 ├─ core/
 │  ├─ __init__.py
 │  ├─ bsp.py
@@ -42,24 +44,32 @@ Xoom/
 │  ├─ map_data.py
 │  ├─ map_loader.py
 │  ├─ player.py
+│  ├─ texture_manager.py
 │  ├─ types.py
 │  └─ visibility.py
 ├─ logs/
 ├─ render/
 │  ├─ __init__.py
-│  ├─ camera.py (deprecated)
 │  ├─ colors.py
-│  ├─ pygame_renderer.py (deprecated)
 │  ├─ glfw_camera.py
 │  ├─ glfw_render.py
 │  └─ renderer_base.py
 ├─ utils/
+│  ├─ __init__.py
 │  ├─ logging_setup.py
 │  └─ math_utils.py
 ├─ settings.py
 ├─ main.py
 └─ requirements.txt
 ```
+
+## Requisitos
+
+- Python 3.11 o superior
+- PyOpenGL 3.1+
+- GLFW 3.4+
+- NumPy 1.23+
+- Pillow 9.0+
 
 ## Instalación
 
@@ -84,13 +94,13 @@ Los mapas se definen en archivos de .xmap con el siguiente formato:
 ```
 # Comentarios empiezan con #
 # Los polígonos se definen con coordenadas X Y por cada vértice
-# POLY <nombre>
+# POLY <nombre> <textura> <altura>
 # Define un polígono con un nombre específico
 # Las coordenadas son en el formato X Y
 # El polígono termina con END
 # El poligono puede tener mas de 4 vértices
 #
-# SEG <nombre>
+# SEG <nombre> <textura> <altura>
 # Define un segmento de línea con un nombre específico
 # Las coordenadas son en el formato X Y
 # El segmento termina con END
@@ -100,7 +110,7 @@ Los mapas se definen en archivos de .xmap con el siguiente formato:
 PLAYER_START -10 20
 
 # Polígonos en sentido horario = paredes interiores (sólidas)
-POLY column
+POLY column column01 50
 -80 -20
 20 -20
 20 20
@@ -108,7 +118,7 @@ POLY column
 END
 
 # Polígonos en sentido anti-horario = áreas exteriores
-POLY wall
+POLY walls wall01 50
 -100 100
 100 100
 100 -100

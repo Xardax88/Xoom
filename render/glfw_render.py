@@ -1,5 +1,6 @@
 """
 render/glfw_render.py
+Renderizador que utiliza GLFW para la ventana y PyOpenGL para el renderizado 2D del minimapa.
 """
 
 from __future__ import annotations
@@ -23,15 +24,19 @@ from OpenGL.GL import (
     glOrtho,
     GL_COLOR_BUFFER_BIT,
     GL_DEPTH_BUFFER_BIT,
+    GL_STENCIL_BUFFER_BIT,
     GL_PROJECTION,
     GL_MODELVIEW,
     GL_LINES,
     GL_QUADS,
     glGetString,
     GL_VERSION,
+    GL_DEPTH_TEST,
     glEnable,
     glDisable,
-    GL_DEPTH_TEST,
+    glBindTexture,
+    glTexCoord2f,
+    GL_TEXTURE_2D,
 )
 from OpenGL.GLU import gluPerspective
 from OpenGL.raw.GL.VERSION.GL_1_0 import glRotatef
@@ -43,6 +48,7 @@ import settings
 from .renderer_base import IRenderer
 from .glfw_camera import Camera2D
 from . import colors
+from core.texture_manager import TextureManager
 
 
 logger = logging.getLogger(__name__)
@@ -82,6 +88,13 @@ class GLFW_OpenGLRenderer(IRenderer):
         if not glfw.init():
             raise RuntimeError("Fallo al inicializar GLFW")
 
+        # Configurar opciones de la ventana GLFW
+        glfw.window_hint(glfw.DOUBLEBUFFER, True)
+        glfw.window_hint(glfw.RESIZABLE, True)
+        glfw.swap_interval(1)
+
+        self.texture_manager = TextureManager()
+
         self.width = width
         self.height = height
 
@@ -102,27 +115,6 @@ class GLFW_OpenGLRenderer(IRenderer):
         self.theme = color_theme if color_theme is not None else colors.default_theme()
         self.camera = Camera2D(width=width, height=height, scale=scale)
         self._setup_gl(width, height)
-
-    def _draw_3d_wall(self, seg: Segment) -> None:
-        wall_height = seg.height if seg.height is not None else settings.WALL_HEIGHT
-        half_height = wall_height / 2.0
-
-        # Coordenadas de textura
-        u1 = seg.u_offset / settings.TEXTURE_SCALE
-        u2 = (seg.u_offset + seg.length()) / settings.TEXTURE_SCALE
-        v1, v2 = 0.0, wall_height / (
-            settings.TEXTURE_SCALE * 2
-        )  # Ajustar escala vertical si es necesario
-
-        # Vértices del muro
-        p1 = seg.a
-        p2 = seg.b
-
-        # Cara frontal
-        glVertex3f(p1.x, -half_height, p1.y)
-        glVertex3f(p2.x, -half_height, p2.y)
-        glVertex3f(p2.x, half_height, p2.y)
-        glVertex3f(p1.x, half_height, p1.y)
 
     def get_opengl_version(self) -> str:
         """
@@ -184,7 +176,8 @@ class GLFW_OpenGLRenderer(IRenderer):
         """
 
         # Limpar el buffer y la profundidad
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        glClearColor(0.0, 0.0, 0.0, 1.0)
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)
 
         self._setup_3d_projection(player)
         self._draw_3d_world(player, visible_segments)
@@ -237,6 +230,7 @@ class GLFW_OpenGLRenderer(IRenderer):
 
         # Configurar Camara
         glMatrixMode(GL_MODELVIEW)
+        # glDepthFunc(GL_LESS)
         glLoadIdentity()
 
         glRotatef(player.angle_deg + 90, 0.0, 1.0, 0.0)
@@ -251,33 +245,68 @@ class GLFW_OpenGLRenderer(IRenderer):
         """
         Dibuja una pared en 3D.
         """
+        # logger.debug(f"Dibujando pared con textura: {seg.texture_name}")
 
-        h = settings.WALL_HEIGHT
+        h = seg.height if seg.height is not None else settings.WALL_HEIGHT
+        texture_name = seg.texture_name
+        if texture_name:
+            texture_id = self.texture_manager.get_gl_texture_id(texture_name)
+            glEnable(GL_TEXTURE_2D)
+            glBindTexture(GL_TEXTURE_2D, texture_id)
+            glColor3f(1, 1, 1)
 
-        color = self.theme.get("wall_interior", (255, 255, 255))
-        dim_factor = 0.8
-        glColor3f(
-            color[0] / 255.0 * dim_factor,
-            color[1] / 255.0 * dim_factor,
-            color[2] / 255.0 * dim_factor,
-        )
+            glBegin(GL_QUADS)
 
-        glBegin(GL_QUADS)
-        # Vertices en el plano XZ, altura en Y
+            # Escala de textura
+            tex_scale = (
+                settings.TEXTURE_SCALE if hasattr(settings, "TEXTURE_SCALE") else 1.0
+            )
 
-        # Abajo-Izquierda
-        glVertex3f(seg.a.x, 0, seg.a.y)
+            # Longitud total del segmento original
+            total_length = (
+                seg.original_segment.length() if seg.original_segment else seg.length()
+            )
 
-        # Abajo-Derecha
-        glVertex3f(seg.b.x, 0, seg.b.y)
+            # Calcular UVs en base a la escala y el offset global
+            u_start = (seg.u_offset / tex_scale) if total_length > 0 else 0
+            u_end = (
+                ((seg.u_offset + seg.length()) / tex_scale) if total_length > 0 else 1
+            )
 
-        # Arriba-Derecha
-        glVertex3f(seg.b.x, h, seg.b.y)
+            glTexCoord2f(u_start, 0)
+            glVertex3f(seg.a.x, 0, seg.a.y)
 
-        # Arriba-Izquierda
-        glVertex3f(seg.a.x, h, seg.a.y)
+            glTexCoord2f(u_end, 0)
+            glVertex3f(seg.b.x, 0, seg.b.y)
 
-        glEnd()
+            glTexCoord2f(u_end, 1)
+            glVertex3f(seg.b.x, h, seg.b.y)
+
+            glTexCoord2f(u_start, 1)
+            glVertex3f(seg.a.x, h, seg.a.y)
+
+            glEnd()
+            glDisable(GL_TEXTURE_2D)
+        else:
+            color = self.theme.get("wall_interior", (255, 255, 255))
+            dim_factor = 0.8
+            glColor3f(
+                color[0] / 255.0 * dim_factor,
+                color[1] / 255.0 * dim_factor,
+                color[2] / 255.0 * dim_factor,
+            )
+
+            glBegin(GL_QUADS)
+            # Vertices en el plano XZ, altura en Y
+            # Abajo-Izquierda
+            glVertex3f(seg.a.x, 0, seg.a.y)
+            # Abajo-Derecha
+            glVertex3f(seg.b.x, 0, seg.b.y)
+            # Arriba-Derecha
+            glVertex3f(seg.b.x, h, seg.b.y)
+            # Arriba-Izquierda
+            glVertex3f(seg.a.x, h, seg.a.y)
+            glEnd()
 
     def _draw_grid(self) -> None:
         """Dibuja una grilla en el plano XZ."""

@@ -3,7 +3,7 @@
 PLAYER_START -90 90
 
 # Rectángulo exterior (L)
-POLY world wall_placeholder 100
+POLY world wall_placeholder 30
 -150 -100
 100 -100
 100 0

@@ -21,6 +21,8 @@ class IMapLoader(ABC):
 
 class FileMapLoader(IMapLoader):
     """Implementación que lee un archivo de texto .xmap."""
+    def __init__(self, texture_manager=None):
+        self.texture_manager = texture_manager
 
     def load(self, path: Path) -> MapData:
         if not path.exists():
@@ -104,6 +106,8 @@ class FileMapLoader(IMapLoader):
         else:
             logger.info("No se encontró la posición del jugador en el mapa. Se usará la posición (0, 0).")
 
+        self._preload_textures(md.segments)
+
         logger.info("Mapa: %s segmentos cargados.", len(md.segments))
         return md
 
@@ -143,3 +147,18 @@ class FileMapLoader(IMapLoader):
             cumulative_length += segment.length()
 
         return segments
+
+    def _preload_textures(self, segments: List[Segment]) -> None:
+        """
+        Precarga todas las texturas únicas utilizadas en los segmentos.
+        """
+        if not self.texture_manager:
+            return
+
+        unique_textures = {seg.texture_name for seg in segments if seg.texture_name}
+        for texture_name in unique_textures:
+            try:
+                self.texture_manager.get_gl_texture_id(texture_name)
+                logger.debug(f"Textura precargada: {texture_name}")
+            except FileNotFoundError:
+                logger.warning(f"No se pudo cargar la textura: {texture_name}")

@@ -1,7 +1,8 @@
 """Funciones matemáticas auxiliares."""
+
 from __future__ import annotations
 from typing import Iterable, List
-from .types import Vec2, Segment
+from core.types import Vec2, Segment
 import math
 
 

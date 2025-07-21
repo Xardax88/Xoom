@@ -2,9 +2,9 @@
 Collision detection module for a BSP tree.
 """
 
-from core.types import Vec2, Segment
+from core.types import Vec2
 from core.bsp import BSPNode
-from core.math_utils import line_side
+from utils.math_utils import line_side
 
 class CollisionDetector:
     """

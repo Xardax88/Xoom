@@ -5,13 +5,13 @@ Esto es un filtro angular + distancia + oclussion.
 """
 
 from __future__ import annotations
-from typing import List, Optional, Iterable
+from typing import List, Optional
 import math
 
 from .types import Segment, Vec2
 from .player import Player
 from .bsp import BSPNode
-from .math_utils import line_side
+from utils.math_utils import line_side
 
 
 def compute_visible_segments(
@@ -46,6 +46,12 @@ def compute_visible_segments(
             # Normalizar a [-pi, pi]
             a1 = _angle_diff(a1, ang) + ang
             a2 = _angle_diff(a2, ang) + ang
+
+            interp_a, interp_b = clipped.a, clipped.b
+            if a1 > a2:
+                a1, a2 = a2, a1
+                interp_a, interp_b = interp_b, interp_a
+
             seg_start = min(a1, a2)
             seg_end = max(a1, a2)
             # Recortar al FOV
@@ -59,17 +65,28 @@ def compute_visible_segments(
             intervals = _subtract_intervals((seg_start, seg_end), covered)
             for istart, iend in intervals:
                 # Interpolar puntos visibles sobre el segmento
-                t0 = (istart - a1) / (a2 - a1) if a2 != a1 else 0.0
-                t1 = (iend - a1) / (a2 - a1) if a2 != a1 else 1.0
+                denominator = a2 - a1
+                # t0 = (istart - a1) / (a2 - a1) if a2 != a1 else 0.0
+                # t1 = (iend - a1) / (a2 - a1) if a2 != a1 else 1.0
+                t0 = (istart - a1) / denominator if denominator != 0 else 0.0
+                t1 = (iend - a1) / denominator if denominator != 0 else 1.0
                 p0 = Vec2(
-                    clipped.a.x + (clipped.b.x - clipped.a.x) * t0,
-                    clipped.a.y + (clipped.b.y - clipped.a.y) * t0,
+                    interp_a.x + (interp_b.x - interp_a.x) * t0,
+                    interp_a.y + (interp_b.y - interp_a.y) * t0,
                     )
                 p1 = Vec2(
-                    clipped.a.x + (clipped.b.x - clipped.a.x) * t1,
-                    clipped.a.y + (clipped.b.y - clipped.a.y) * t1,
+                    interp_a.x + (interp_b.x - interp_a.x) * t1,
+                    interp_a.y + (interp_b.y - interp_a.y) * t1,
                     )
-                visible.append(Segment(p0, p1, clipped.interior_facing))
+                visible.append(
+                    Segment(
+                        p0,
+                        p1,
+                        clipped.interior_facing,
+                        original_segment=seg.original_segment,
+                    )
+                )
+
                 covered.append((istart, iend))
             # Unir y ordenar intervalos cubiertos para eficiencia
             covered = _merge_intervals(covered)
@@ -120,15 +137,15 @@ def _clip_segment_to_triangle_multi(seg: Segment, tri: tuple[Vec2, Vec2, Vec2]) 
             return []
     # Si hay más de 2 puntos, hay dos segmentos
     if len(poly) == 2:
-        return [Segment(poly[0], poly[1], seg.interior_facing)]
+        return [seg.replace(a=poly[0], b=poly[1])]
     elif len(poly) == 3:
         return [
-            Segment(poly[0], poly[1], seg.interior_facing),
-            Segment(poly[1], poly[2], seg.interior_facing),
+            seg.replace(a=poly[0], b=poly[1]),
+            seg.replace(a=poly[1], b=poly[2]),
         ]
     else:
         # Raro, pero por seguridad
-        return [Segment(poly[i], poly[i+1], seg.interior_facing) for i in range(len(poly)-1)]
+        return [seg.replace(a=poly[i], b=poly[i+1]) for i in range(len(poly)-1)]
 
 def _clip_segment_to_triangle(seg: Segment, tri: tuple[Vec2, Vec2, Vec2]) -> Segment | None:
     # Recorta el segmento contra el triángulo FOV.
@@ -139,7 +156,7 @@ def _clip_segment_to_triangle(seg: Segment, tri: tuple[Vec2, Vec2, Vec2]) -> Seg
         poly = _clip_poly_against_edge(poly, a, b)
         if not poly or len(poly) < 2:
             return None
-    return Segment(poly[0], poly[1], seg.interior_facing)
+    return seg.replace(a=poly[0], b=poly[1])
 
 def _clip_poly_against_edge(poly: list[Vec2], a: Vec2, b: Vec2) -> list[Vec2]:
     # Recorta una lista de puntos contra el semiplano izquierdo de la arista ab

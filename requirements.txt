@@ -1,2 +1,4 @@
 pygame
-pyvulkan
+glfw
+PyOpenGL
+Pillow

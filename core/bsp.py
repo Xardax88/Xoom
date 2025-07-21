@@ -8,7 +8,7 @@ import logging
 import random
 
 from .types import Segment, Vec2
-from .math_utils import split_segment
+from utils.math_utils import split_segment
 from .errors import BSPBuildError
 
 logger = logging.getLogger(__name__)
@@ -66,10 +66,14 @@ class BSPBuilder:
                 node.coplanar.append(s)
                 continue
             f, b = split_segment(s, partition.a, partition.b)
+            #if f:
+            #    front_list.extend(f)
+            #if b:
+            #    back_list.extend(b)
             if f:
-                front_list.extend(f)
+                front_list.extend([s.replace(a=part.a, b=part.b) for part in f])
             if b:
-                back_list.extend(b)
+                back_list.extend([s.replace(a=part.a, b=part.b) for part in b])
 
         # recursión
         node.front = self._build_recursive(front_list, depth + 1) if front_list else None

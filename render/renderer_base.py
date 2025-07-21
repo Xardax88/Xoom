@@ -13,11 +13,16 @@ from core.types import Segment
 
 class IRenderer(ABC):
     @abstractmethod
-    def is_running(self) -> bool:  # pragma: no cover - interface
+    def is_running(self) -> bool:
+        """Devuelve True si el renderizador (p. ej. la ventana) sigue activo."""
         ...
 
     @abstractmethod
-    def poll_input(self) -> Dict[str, Any]:  # pragma: no cover - interface
+    def poll_input(self) -> Dict[str, Any]:
+        """
+        Sondea y procesa la entrada del usuario y la devuelve en un formato
+        estandarizado que el juego pueda entender.
+        """
         ...
 
     @abstractmethod
@@ -26,5 +31,30 @@ class IRenderer(ABC):
         map_data: MapData,
         player: Player,
         visible_segments: Optional[Iterable[Segment]] = None,
-    ) -> None:  # pragma: no cover - interface
+    ) -> None:
+        """
+        Dibuja un único fotograma en el búfer trasero de la pantalla.
+        No se encarga de mostrarlo.
+        """
+        ...
+
+    @abstractmethod
+    def dispatch_events(self) -> None:
+        """
+        Procesa los eventos pendientes de la ventana (movimiento del ratón,
+        clics, etc.). Esencial para que la aplicación no se bloquee.
+        """
+        ...
+
+    @abstractmethod
+    def flip_buffers(self) -> None:
+        """
+        Intercambia los búferes de la pantalla para mostrar el fotograma
+        renderizado.
+        """
+        ...
+
+    @abstractmethod
+    def shutdown(self) -> None:
+        """Limpia los recursos del renderizador (p. ej. al cerrar)."""
         ...

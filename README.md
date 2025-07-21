@@ -2,20 +2,23 @@
 
 Un motor de juego 3D estilo Doom implementado en Python.
 
-![Status](https://img.shields.io/badge/status-En%20Desarrollo-blue)
+![Status](https://img.shields.io/badge/status-working%20progress-indigo)
+![GitHub last commit](https://img.shields.io/github/last-commit/Xardax88/Xoom)
 ![Tamaño del Repo](https://img.shields.io/github/repo-size/Xardax88/Xoom)
-[![Licencia](https://img.shields.io/github/license/Xardax88/Xoom)](LICENSE)
+[![GitHub License](https://img.shields.io/github/license/Xardax88/Xoom)](LICENSE)
 ![Python Version](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-![PyGame Version](https://img.shields.io/badge/PyGame-2.6+-blue?logo=pygame&logoColor=white)
-![SDL Version](https://img.shields.io/badge/SDL-2.28+-blue?logo=libsdl&logoColor=white)
+![PyOpenGL Version](https://img.shields.io/badge/PyOpenGL-3.1+-blue)
+![GLFW Version](https://img.shields.io/badge/GLFW-3.4+-blue)
 
 ## Descripción
 
-El objetivo es recrear la experiencia de juegos clásicos como Doom, Duke Nukem 3D y Quake, utilizando técnicas de renderizado 2.5D y un sistema de mapas basado en polígonos. 
-Además de poner a prueba mis habilidades de programación en Python, PyGame, OpenGL, Vulkan y SDL.
+El objetivo es recrear la experiencia de juegos clásicos como Doom y Duke Nukem 3D, utilizando técnicas de renderizado 2.5D y un sistema de mapas basado en polígonos. 
+Además de poner a prueba mis habilidades de programación en Python y OpenGL.
 
 En su momento, realize un proyecto similar en C++, pero desgraciadamente se perdió el código fuente. Asi que esta vez lo estoy haciendo desde cero en Python aplicando lo aprendido, y guardando mi avance en GitHub.
+
+En un futuro planeo portar el render a Vulkan para aprender a utilizar la API.
 
 ## Características
 
@@ -38,19 +41,22 @@ Xoom/
 │  ├─ game.py
 │  ├─ map_data.py
 │  ├─ map_loader.py
-│  ├─ match_utils.py
 │  ├─ player.py
 │  ├─ types.py
 │  └─ visibility.py
 ├─ logs/
 ├─ render/
 │  ├─ __init__.py
-│  ├─ camera.py
+│  ├─ camera.py (deprecated)
 │  ├─ colors.py
-│  ├─ pygame_renderer.py
+│  ├─ pygame_renderer.py (deprecated)
+│  ├─ glfw_camera.py
+│  ├─ glfw_render.py
 │  └─ renderer_base.py
+├─ utils/
+│  ├─ logging_setup.py
+│  └─ math_utils.py
 ├─ settings.py
-├─ logging_setup.py
 ├─ main.py
 └─ requirements.txt
 ```
@@ -139,4 +145,4 @@ Los logs se guardan en la carpeta `logs/` con timestamp.
 - Soporte para enemigos y objetos
 - Efectos de iluminación
 - Soporte para sprites
-- Audio espacial
+- Audio

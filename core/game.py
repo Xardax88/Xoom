@@ -30,21 +30,35 @@ class Game:
         logger.info("Entrando al loop principal.")
         self._running = True
         last_time = time.perf_counter()
-        while self._running and self.renderer.is_running():
-            now = time.perf_counter()
-            dt = now - last_time
-            last_time = now
 
-            self._handle_input(dt)
-            self._update(dt)
+        try:
+            while self._running and self.renderer.is_running():
+                now = time.perf_counter()
+                # Delta time
+                dt = now - last_time
+                last_time = now
 
-            # calcular visibilidad
-            self._visible_cache = compute_visible_segments(self.bsp_root, self.player)
+                # Procesar eventos de la ventana
+                self.renderer.dispatch_events()
 
-            # dibujar (nota: usamos argumento nombrado para evitar errores por número de params)
-            self.renderer.draw_frame(self.map_data, self.player, visible_segments=self._visible_cache)
+                # Leer input y actualizar estado del jugador
+                self._handle_input(dt)
+                self._update(dt)
 
-        logger.info("Loop principal terminado.")
+                # Calcular la lógica del juego (visibilidad)
+                self._visible_cache = compute_visible_segments(self.bsp_root, self.player)
+
+                # Dibujar el frame en el buffer oculto
+                self.renderer.draw_frame(
+                    self.map_data, self.player, visible_segments=self._visible_cache
+                )
+
+                # Mostrar el frame en pantalla
+                self.renderer.flip_buffers()
+
+        finally:
+            self.renderer.shutdown()
+            logger.info("Loop principal terminado y recursos liberados.")
 
     def stop(self) -> None:
         self._running = False
@@ -54,9 +68,12 @@ class Game:
         if inp.get("quit"):
             self.stop()
             return
+
+        # Aplicar input al jugador
         turn = inp.get("turn", 0.0)
         if turn:
-            self.player.rotate(turn)
+            self.player.rotate(turn * dt) # Aplicar dt
+
         move = inp.get("move", 0.0)
         strafe = inp.get("strafe", 0.0)
         if move or strafe:
@@ -64,16 +81,21 @@ class Game:
             ang = math.radians(self.player.angle_deg)
             fx = math.cos(ang); fy = math.sin(ang)
             rx = math.cos(ang + math.pi/2); ry = math.sin(ang + math.pi/2)
-            dx = fx * move + rx * strafe
-            dy = fy * move + ry * strafe
+
+            # Aplicar dt al vector de movimiento
+            dx = (fx * move + rx * strafe) * dt
+            dy = (fy * move + ry * strafe) * dt
+
             start = self.player.pos
-            end = type(start)(self.player.x + dx * dt, self.player.y + dy * dt)
+            # El final ya tiene dt aplicado
+            end = type(start)(self.player.x + dx, self.player.y + dy)
+
             col = self.collision.find_first_collision(start, end)
             if col is not None:
-                self.player.x = col.x - dx * dt
-                self.player.y = col.y - dy * dt
+                # Por el momento solo se detiene al colisionar
+                pass
             else:
-                self.player.move(dx * dt, dy * dt)
+                self.player.move(dx, dy)
 
     def _update(self, dt: float) -> None:  # noqa: ARG002 - dt usado en futuro
         pass

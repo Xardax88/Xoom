@@ -3,6 +3,7 @@ Colores por defecto (R,G,B).
 """
 
 WHITE = (255, 255, 255)
+DARK_GRAY = (100, 100, 100)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
@@ -22,4 +23,5 @@ def default_theme():
         "player": RED,
         "fov": YELLOW,
         "visible_wall": GREEN,
+        "floor": DARK_GRAY,
     }

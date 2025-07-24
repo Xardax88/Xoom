@@ -1,7 +1,9 @@
+# En: core/map_loader.py
+
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict
 import logging
 
 from .types import Vec2, Segment
@@ -30,6 +32,7 @@ class FileMapLoader(IMapLoader):
         logger.info("Cargando mapa desde %s", path)
 
         segments: List[Segment] = []
+        polygons: Dict[str, List[Vec2]] = {}
         player_start_position: Optional[Vec2] = None
 
         try:
@@ -65,7 +68,7 @@ class FileMapLoader(IMapLoader):
 
             if parts[0].upper() == "POLY":
                 # POLY <name> [texture] [height]
-                name = parts[1] if len(parts) > 1 else "poly"
+                name = parts[1] if len(parts) > 1 else f"poly_{len(polygons)}"
                 texture_name = parts[2] if len(parts) > 2 else None
                 try:
                     height = float(parts[3]) if len(parts) > 3 else None
@@ -84,9 +87,18 @@ class FileMapLoader(IMapLoader):
                     raise MapLoadError(f"Polígono {name} sin END")
 
                 if len(pts) >= 2:
-                    is_interior = is_clockwise(pts)
+                    # Guardar los vértices del polígono
+                    polygons[name] = pts
+
+                    # --- CORRECCIÓN CLAVE ---
+                    # Un polígono CCW (is_clockwise=False) es una habitación, sus caras miran hacia adentro.
+                    # Un polígono CW (is_clockwise=True) es un sólido, sus caras miran hacia afuera.
+                    # Por lo tanto, 'interior_facing' debe ser el opuesto de 'is_clockwise'.
+                    is_interior = not is_clockwise(pts)
+
                     poly_segments = self._create_segments_from_poly(
                         vertices=pts,
+                        polygon_name=name,
                         interior_facing=is_interior,
                         texture_name=texture_name,
                         height=height,
@@ -98,7 +110,8 @@ class FileMapLoader(IMapLoader):
 
             raise MapLoadError(f"Token desconocido: {parts[0]}")
 
-        md = MapData(segments=segments)
+        # Crear MapData con segmentos y polígonos
+        md = MapData(segments=segments, polygons=polygons)
 
         if player_start_position:
             md.player_start = player_start_position
@@ -108,19 +121,20 @@ class FileMapLoader(IMapLoader):
 
         self._preload_textures(md.segments)
 
-        logger.info("Mapa: %s segmentos cargados.", len(md.segments))
+        logger.info("Mapa: %s segmentos y %s polígonos cargados.", len(md.segments), len(md.polygons))
         return md
 
     def _create_segments_from_poly(
-        self,
-        vertices: list[Vec2],
-        interior_facing: bool,
-        texture_name: Optional[str] = None,
-        height: Optional[float] = None,
+            self,
+            vertices: list[Vec2],
+            polygon_name: str,
+            interior_facing: bool,
+            texture_name: Optional[str] = None,
+            height: Optional[float] = None,
     ) -> list[Segment]:
         """
-        Crea segmentos a partir de una lista de vértices, calculando el
-        desfase de textura acumulativo (u_offset) y asignando la orientación.
+        Crea segmentos a partir de una lista de vértices, etiquetándolos
+        con el nombre de su polígono padre.
         """
         segments = []
         if len(vertices) < 2:
@@ -132,7 +146,6 @@ class FileMapLoader(IMapLoader):
             p1 = vertices[i]
             p2 = vertices[(i + 1) % len(vertices)]
 
-            # Creamos el segmento con todos sus datos, incluido el u_offset
             segment = Segment(
                 a=p1,
                 b=p2,
@@ -140,10 +153,9 @@ class FileMapLoader(IMapLoader):
                 interior_facing=interior_facing,
                 texture_name=texture_name,
                 height=height,
+                polygon_name=polygon_name,
             )
             segments.append(segment)
-
-            # Acumulamos la longitud para el siguiente segmento
             cumulative_length += segment.length()
 
         return segments
@@ -162,3 +174,4 @@ class FileMapLoader(IMapLoader):
                 logger.debug(f"Textura precargada: {texture_name}")
             except FileNotFoundError:
                 logger.warning(f"No se pudo cargar la textura: {texture_name}")
+

@@ -10,64 +10,8 @@ import numpy as np
 from typing import Dict, Any, Iterable, Optional
 
 import glfw
-from OpenGL.GL import (
-    glBegin,
-    glEnd,
-    glColor3f,
-    glVertex2f,
-    glVertex3f,
-    glLineWidth,
-    glClear,
-    glClearColor,
-    glLoadIdentity,
-    glMatrixMode,
-    glTranslatef,
-    glOrtho,
-    GL_COLOR_BUFFER_BIT,
-    GL_DEPTH_BUFFER_BIT,
-    GL_STENCIL_BUFFER_BIT,
-    GL_PROJECTION,
-    GL_MODELVIEW,
-    GL_LINES,
-    GL_QUADS,
-    glGetString,
-    GL_VERSION,
-    GL_DEPTH_TEST,
-    glEnable,
-    glDisable,
-    glBindTexture,
-    glTexCoord2f,
-    GL_TEXTURE_2D,
-    shaders,
-    GL_VERTEX_SHADER,
-    GL_FRAGMENT_SHADER,
-    glUseProgram,
-    glGetAttribLocation,
-    glEnableVertexAttribArray,
-    glVertexAttribPointer,
-    glGetUniformLocation,
-    glUniform3f,
-    glUniformMatrix4fv,
-    glGenBuffers,
-    glBindBuffer,
-    glBufferData,
-    glDrawArrays,
-    glDisableVertexAttribArray,
-    glDeleteBuffers,
-    GL_ARRAY_BUFFER,
-    GL_FLOAT,
-    GL_QUADS,
-    GL_STATIC_DRAW,
-    glGetFloatv,
-    GL_MODELVIEW_MATRIX,
-    GL_PROJECTION_MATRIX,
-    GL_FALSE,
-    glRotatef,
-    glOrtho,
-    glViewport,
-    glMatrixMode,
-)
-
+from OpenGL.GL import *
+from OpenGL.GL import shaders
 from core.texture_manager import TextureManager
 from .glfw_camera import Camera2D
 from .world_renderer import WorldRenderer
@@ -78,6 +22,7 @@ from core.player import Player
 import settings
 from core.types import Segment, Vec2
 from . import colors
+from core.visibility import VisibilityManager
 
 
 logger = logging.getLogger(__name__)
@@ -111,20 +56,41 @@ class GLFW_OpenGLRenderer(IRenderer):
         """
         return glfw.get_version_string().decode()
 
-    def _init_shaders(self):
-        vertex_src = load_shader_source("assets/shaders/wall.vert")
-        fragment_src = load_shader_source("assets/shaders/wall.frag")
-        if not vertex_src or not fragment_src:
-            raise RuntimeError("No se pudieron cargar los shaders")
-        logger.info("Compilando shaders OpenGL...")
+    def _compile_shader_program(self, vert_path: str, frag_path: str) -> int:
+        """Compila un par de shaders y devuelve el ID del programa."""
         try:
-            self.shader_program = shaders.compileProgram(
+            vertex_src = load_shader_source(vert_path)
+            fragment_src = load_shader_source(frag_path)
+            if not vertex_src or not fragment_src:
+                raise RuntimeError(
+                    f"No se pudieron cargar los shaders: {vert_path}, {frag_path}"
+                )
+
+            program = shaders.compileProgram(
                 shaders.compileShader(vertex_src, GL_VERTEX_SHADER),
                 shaders.compileShader(fragment_src, GL_FRAGMENT_SHADER),
             )
+            return program
         except Exception as e:
-            logger.error("Error al compilar los shaders: %s", e)
+            logger.error(
+                "Error al compilar shaders (%s, %s): %s", vert_path, frag_path, e
+            )
             raise RuntimeError("Fallo al compilar los shaders OpenGL") from e
+
+    def _init_shaders(self):
+        """Inicializa todos los programas de shaders necesarios."""
+        logger.info("Compilando shaders de pared...")
+        self.shader_program = self._compile_shader_program(
+            "assets/shaders/wall.vert", "assets/shaders/wall.frag"
+        )
+        logger.info("Compilando shaders de suelo...")
+        self.floor_shader_program = self._compile_shader_program(
+            "assets/shaders/floor.vert", "assets/shaders/floor.frag"
+        )
+        logger.info("Compilando shaders de UI...")
+        self.ui_shader_program = self._compile_shader_program(
+            "assets/shaders/ui_button.vert", "assets/shaders/ui_button.frag"
+        )
 
     def __init__(
         self,
@@ -140,11 +106,12 @@ class GLFW_OpenGLRenderer(IRenderer):
         # Configurar opciones de la ventana GLFW
         glfw.window_hint(glfw.DOUBLEBUFFER, True)
         glfw.window_hint(glfw.RESIZABLE, True)
-        # glfw.swap_interval(1)
 
         self.theme = color_theme if color_theme is not None else colors.default_theme()
-        self.world_renderer = WorldRenderer(self)
         self.texture_manager = TextureManager()
+        self.shader_program = None
+        self.floor_shader_program = None
+        self.ui_shader_program = None  # <-- Añadimos la propiedad
 
         self.width = width
         self.height = height
@@ -155,7 +122,10 @@ class GLFW_OpenGLRenderer(IRenderer):
             raise RuntimeError("Fallo al crear la ventana GLFW")
 
         glfw.make_context_current(self.window)
+        # El estado por defecto al inicio de un frame será para 3D
         glEnable(GL_DEPTH_TEST)
+        glEnable(GL_CULL_FACE)
+        glCullFace(GL_BACK)
 
         self._init_shaders()
 
@@ -186,16 +156,10 @@ class GLFW_OpenGLRenderer(IRenderer):
 
     def _on_resize(self, window, width: int, height: int) -> None:
         """Callback para el redimensionamiento de la ventana."""
-
-        from OpenGL.GL import glViewport
-
         self.width = width
         self.height = height
-
         glViewport(0, 0, width, height)
-
         self.camera.update_viewport(width, height)
-        # self._setup_gl(width, height)
 
     # --- Implementación de la interfaz IRenderer ---
 
@@ -226,11 +190,6 @@ class GLFW_OpenGLRenderer(IRenderer):
         ):
             state["select"] = True
 
-        if glfw.get_key(self.window, glfw.KEY_ESCAPE) == glfw.PRESS:
-            state["quit"] = True
-            glfw.set_window_should_close(self.window, True)
-            return state
-
         for key, (action, value) in _KEYMAP.items():
             if glfw.get_key(self.window, key) == glfw.PRESS:
                 if action in ("turn", "move", "strafe"):
@@ -247,12 +206,19 @@ class GLFW_OpenGLRenderer(IRenderer):
         """
         Orquesta el dibujado del mapa en 3D y del overlay del minimapa 2D.
         """
-
-        # Limpar el buffer y la profundidad
         glClearColor(0.0, 0.0, 0.0, 1.0)
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
-        self.world_renderer.draw_3d_world(player, visible_segments)
+        if (
+            visible_segments is None
+            and hasattr(map_data, "bsp_root")
+            and map_data.bsp_root
+        ):
+            visible_segments = VisibilityManager.compute_visible_segments(
+                map_data.bsp_root, player
+            )
+
+        self.world_renderer.draw_3d_world(player, visible_segments, map_data)
         self.world_renderer.draw_2d_minimap(map_data, player, visible_segments)
 
     def dispatch_events(self) -> None:
@@ -263,6 +229,16 @@ class GLFW_OpenGLRenderer(IRenderer):
 
     def shutdown(self) -> None:
         logger.info("Cerrando GLFW.")
+        if self.shader_program:
+            glDeleteProgram(self.shader_program)
+        if self.floor_shader_program:
+            glDeleteProgram(self.floor_shader_program)
+        if self.ui_shader_program:
+            glDeleteProgram(self.ui_shader_program)
+
+        if hasattr(self, "ui_renderer"):
+            self.ui_renderer.cleanup()
+
         glfw.terminate()
 
     def draw_main_menu(self, options, selected_index):

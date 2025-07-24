@@ -43,6 +43,7 @@ class Segment:
     texture_name: str | None = None
     height: float | None = None
     original_segment: Optional["Segment"] = None
+    polygon_name: Optional[str] = None
 
     def __post_init__(self):
         """

@@ -1,5 +1,5 @@
-[Inglish 🇺🇸](README) /
-[Español 🇦🇷](README_ES)
+[Inglish 🇺🇸](README.md) /
+[Español 🇦🇷](README.ES.md)
 # Xoom - Motor Estilo Doom en Python 🐍
 
 Un motor de juego 3D estilo "raycasting" inspirado en clásicos como Doom, implementado en Python y OpenGL.

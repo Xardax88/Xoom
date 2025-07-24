@@ -13,6 +13,11 @@ from OpenGL.GLU import gluPerspective
 
 import math
 import numpy as np
+import ctypes
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class WorldRenderer:
@@ -20,29 +25,51 @@ class WorldRenderer:
         self.renderer = renderer  # Referencia al GLFWOpenGLRenderer
         self.theme = renderer.theme
 
-    def draw_3d_world(self, player: Player, visible_segments):
-        # Configura proyección 3D y dibuja paredes
+    def draw_3d_world(
+        self, player: Player, visible_segments: list[Segment], map_data: MapData
+    ):
+        """
+        Renderiza el mundo 3D usando los segmentos visibles completos.
+        Además, dibuja las caras del suelo de cada polígono del mapa.
+        """
+
+        glEnable(GL_DEPTH_TEST)
+        glEnable(GL_CULL_FACE)
+        # Configura proyección 3D
         self._setup_3d_projection(player)
-        # Configurar Camara
+
+        # Configurar Cámara
         glMatrixMode(GL_MODELVIEW)
-        # glDepthFunc(GL_LESS)
+        glDepthFunc(GL_LESS)
         glLoadIdentity()
 
         glRotatef(player.angle_deg + 90, 0.0, 1.0, 0.0)
         glTranslatef(-player.x, -settings.PLAYER_HEIGHT, -player.y)
 
-        # Dibujar las paredes visibles
+        # --- Renderizado del mundo ---
+        # 1. Dibujar el suelo de los polígonos visibles
+        self._draw_floors(map_data, visible_segments)
+
+        # 2. Dibujar las paredes visibles
         if visible_segments:
             for seg in visible_segments:
                 self._draw_3d_wall(seg, player)
 
-        # Dibujar grilla
-        self._draw_grid()
+        # 3. Dibujar grilla (opcional, puedes comentarla para ver mejor el suelo)
+        # self._draw_grid()
 
     def draw_2d_minimap(self, map_data: MapData, player: Player, visible_segments):
-        # Configura proyección 2D y dibuja minimapa
-        self._setup_2d_projection()
+        """
+        Renderiza el minimapa usando los segmentos visibles completos.
+        La lista visible_segments debe ser generada por VisibilityManager.
+        """
+
+        # Desactivar pruebas de profundidad y culling
         glDisable(GL_DEPTH_TEST)
+        glDisable(GL_CULL_FACE)
+
+        # Configurar proyección 2D
+        self._setup_2d_projection()
 
         # Configurar matrix de vista
         glMatrixMode(GL_MODELVIEW)
@@ -56,14 +83,10 @@ class WorldRenderer:
         self._draw_map(map_data, visible_segments)
         self._draw_player(player)
 
-        # Rehabilitar el test de profundidad
-        glEnable(GL_DEPTH_TEST)
-
     def _setup_3d_projection(self, player: Player) -> None:
         """
         Configura la mastriz para la vista del jugador en 3D.
         """
-
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
 
@@ -89,33 +112,184 @@ class WorldRenderer:
         height = self.renderer.height
         glOrtho(0, width, 0, height, -1, 1)
 
-    def _draw_3d_wall(self, seg: Segment, player: Player):
-        glUseProgram(self.renderer.shader_program)
-        h = seg.height if seg.height is not None else settings.WALL_HEIGHT
+    def _draw_floors(self, map_data: MapData, visible_segments: list[Segment]):
+        """
+        Dibuja el suelo de los polígonos visibles usando shaders.
+        Puede usar una textura si está definida, o un color sólido como fallback.
+        """
+        shader = self.renderer.floor_shader_program
+        if not shader or not visible_segments or not map_data.polygons:
+            return
 
-        # Coordenadas de textura (UV)
-        # u_start, u_end = 0.0, 1.0  # Calcula según tu lógica de textura
+        glUseProgram(shader)
 
-        # Escala de textura
+        modelview = glGetFloatv(GL_MODELVIEW_MATRIX)
+        projection = glGetFloatv(GL_PROJECTION_MATRIX)
+        glUniformMatrix4fv(
+            glGetUniformLocation(shader, "modelview"), 1, GL_FALSE, modelview
+        )
+        glUniformMatrix4fv(
+            glGetUniformLocation(shader, "projection"), 1, GL_FALSE, projection
+        )
+
+        use_texture_loc = glGetUniformLocation(shader, "useTexture")
+        color_loc = glGetUniformLocation(shader, "floorColor")
+        texture_sampler_loc = glGetUniformLocation(shader, "floorTexture")
+
         tex_scale = (
             settings.TEXTURE_SCALE if hasattr(settings, "TEXTURE_SCALE") else 1.0
         )
 
-        # Longitud total del segmento original
-        total_length = (
-            seg.original_segment.length() if seg.original_segment else seg.length()
+        drawn_polygons = set()
+        for seg in visible_segments:
+            if seg.polygon_name and seg.polygon_name not in drawn_polygons:
+                drawn_polygons.add(seg.polygon_name)
+                poly_vertices = map_data.polygons.get(seg.polygon_name)
+
+                if not poly_vertices or len(poly_vertices) < 3:
+                    continue
+
+                # --- Configuración por polígono (textura o color) ---
+                use_texture = (
+                    seg.texture_name and seg.texture_name != "floor_placeholder"
+                )
+                glUniform1i(use_texture_loc, GL_TRUE if use_texture else GL_FALSE)
+
+                if use_texture:
+                    texture_id = self.renderer.texture_manager.get_gl_texture_id(
+                        seg.texture_name
+                    )
+                    glActiveTexture(GL_TEXTURE0)
+                    glBindTexture(GL_TEXTURE_2D, texture_id)
+                    glUniform1i(texture_sampler_loc, 0)
+                else:
+                    floor_color_rgb = self.theme.get("floor", colors.DARK_GRAY)
+                    floor_color_gl = [c / 255.0 for c in floor_color_rgb]
+                    glUniform3f(color_loc, *floor_color_gl)
+
+                # --- Preparación de Vértices (Posición + UVs) ---
+                vertex_data = []
+                # --- CAMBIO CLAVE: Iteramos sobre los vértices en orden INVERSO ---
+                for v in reversed(poly_vertices):
+                    vertex_data.extend(
+                        [
+                            v.x,
+                            0.0,
+                            v.y,  # position (x, 0, z)
+                            v.x / tex_scale,
+                            v.y / tex_scale,  # texCoord (u, v)
+                        ]
+                    )
+                vertices = np.array(vertex_data, dtype=np.float32)
+
+                # --- Creación de VBO y dibujado ---
+                vbo = glGenBuffers(1)
+                glBindBuffer(GL_ARRAY_BUFFER, vbo)
+                glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+
+                pos_loc = glGetAttribLocation(shader, "position")
+                glEnableVertexAttribArray(pos_loc)
+                glVertexAttribPointer(
+                    pos_loc, 3, GL_FLOAT, GL_FALSE, 20, ctypes.c_void_p(0)
+                )
+
+                uv_loc = glGetAttribLocation(shader, "texCoordIn")
+                glEnableVertexAttribArray(uv_loc)
+                glVertexAttribPointer(
+                    uv_loc, 2, GL_FLOAT, GL_FALSE, 20, ctypes.c_void_p(12)
+                )
+
+                glDrawArrays(GL_TRIANGLE_FAN, 0, len(poly_vertices))
+
+                glDisableVertexAttribArray(pos_loc)
+                glDisableVertexAttribArray(uv_loc)
+                glBindBuffer(GL_ARRAY_BUFFER, 0)
+                glDeleteBuffers(1, [vbo])
+
+        glUseProgram(0)
+
+        """
+        if not visible_segments or not map_data.polygons:
+            return
+
+        floor_color = self.theme.get("floor", colors.DARK_GRAY)
+        glColor3f(
+            floor_color[0] / 255.0, floor_color[1] / 255.0, floor_color[2] / 255.0
         )
 
-        # Calcular UVs en base a la escala y el offset global
-        u_start = (seg.u_offset / tex_scale) if total_length > 0 else 0
-        u_end = ((seg.u_offset + seg.length()) / tex_scale) if total_length > 0 else 1
+        # Desactivamos los shaders para dibujar con color fijo (modo inmediato)
+        glUseProgram(0)
+
+        # Usamos un set para no dibujar el mismo polígono varias veces
+        drawn_polygons = set()
+
+        for seg in visible_segments:
+            # Si el segmento pertenece a un polígono y no lo hemos dibujado ya
+            # logger.debug(" Polígono: %s", seg.polygon_name)
+
+            if seg.polygon_name and seg.polygon_name not in drawn_polygons:
+                # Lo marcamos como dibujado
+                drawn_polygons.add(seg.polygon_name)
+
+                # Obtenemos sus vértices desde map_data
+                poly_vertices = map_data.polygons.get(seg.polygon_name)
+                logger.debug(
+                    " Dibujando polígono: %s con vértices %s",
+                    seg.polygon_name,
+                    poly_vertices,
+                )
+                if poly_vertices:
+                    glBegin(GL_POLYGON)
+                    for vertex in poly_vertices:
+                        # Dibujamos el polígono en el plano Y=0
+                        glVertex3f(vertex.x, 0, vertex.y)
+                    glEnd()
+        """
+
+    def _draw_3d_wall(self, seg: Segment, player: Player):
+        shader = self.renderer.shader_program
+        if not shader:
+            return
+        glUseProgram(shader)
+
+        h = seg.height if seg.height is not None else settings.WALL_HEIGHT
+
+        tex_scale = (
+            settings.TEXTURE_SCALE if hasattr(settings, "TEXTURE_SCALE") else 1.0
+        )
+
+        u_start = seg.u_offset / tex_scale
+        u_end = (seg.u_offset + seg.length()) / tex_scale
+
+        # Definimos los puntos de inicio y fin del segmento de la pared.
+        # Dependiendo de la orientación de la cara, los usaremos en un orden u otro.
+        v_start = seg.a
+        v_end = seg.b
+
+        if seg.interior_facing:
+            # La cara visible es la interior. El orden CCW visto desde dentro es:
+            # start -> end -> end_top -> start_top
+            # Esto corresponde a los vértices (a, b, b_top, a_top)
+            p1, p2 = v_start, v_end
+            uv1, uv2 = u_start, u_end
+
+        else:
+            # La cara visible es la exterior. El orden CCW visto desde fuera es:
+            # end -> start -> start_top -> end_top
+            # Esto corresponde a los vértices (b, a, a_top, b_top)
+            p1, p2 = v_end, v_start
+            uv1, uv2 = u_end, u_start
+
+        p1, p2 = v_start, v_end
+        uv1, uv2 = u_start, u_end
 
         vertices = np.array(
             [
-                [seg.a.x, 0, seg.a.y, u_start, 0],
-                [seg.b.x, 0, seg.b.y, u_end, 0],
-                [seg.b.x, h, seg.b.y, u_end, 1],
-                [seg.a.x, h, seg.a.y, u_start, 1],
+                # Vértices definidos dinámicamente para ser siempre CCW en la cara visible
+                [p1.x, 0, p1.y, uv1, 0],  # Abajo-Izquierda
+                [p2.x, 0, p2.y, uv2, 0],  # Abajo-Derecha
+                [p2.x, h, p2.y, uv2, 1],  # Arriba-Derecha
+                [p1.x, h, p1.y, uv1, 1],  # Arriba-Izquierda
             ],
             dtype=np.float32,
         )
@@ -124,28 +298,26 @@ class WorldRenderer:
         glBindBuffer(GL_ARRAY_BUFFER, vbo)
         glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
 
-        pos_loc = glGetAttribLocation(self.renderer.shader_program, "position")
-        uv_loc = glGetAttribLocation(self.renderer.shader_program, "texCoordIn")
+        pos_loc = glGetAttribLocation(shader, "position")
+        uv_loc = glGetAttribLocation(shader, "texCoordIn")
         glEnableVertexAttribArray(pos_loc)
         glVertexAttribPointer(pos_loc, 3, GL_FLOAT, False, 20, ctypes.c_void_p(0))
         glEnableVertexAttribArray(uv_loc)
         glVertexAttribPointer(uv_loc, 2, GL_FLOAT, False, 20, ctypes.c_void_p(12))
 
-        # Enlazar textura si existe
         if seg.texture_name:
             texture_id = self.renderer.texture_manager.get_gl_texture_id(
                 seg.texture_name
             )
             glActiveTexture(GL_TEXTURE0)
             glBindTexture(GL_TEXTURE_2D, texture_id)
-            tex_loc = glGetUniformLocation(self.renderer.shader_program, "wallTexture")
+            tex_loc = glGetUniformLocation(shader, "wallTexture")
             glUniform1i(tex_loc, 0)
 
-        # --- Enviar matrices modelview y projection ---
         modelview = glGetFloatv(GL_MODELVIEW_MATRIX)
         projection = glGetFloatv(GL_PROJECTION_MATRIX)
-        mv_loc = glGetUniformLocation(self.renderer.shader_program, "modelview")
-        pr_loc = glGetUniformLocation(self.renderer.shader_program, "projection")
+        mv_loc = glGetUniformLocation(shader, "modelview")
+        pr_loc = glGetUniformLocation(shader, "projection")
         glUniformMatrix4fv(mv_loc, 1, GL_FALSE, modelview)
         glUniformMatrix4fv(pr_loc, 1, GL_FALSE, projection)
 
@@ -158,25 +330,21 @@ class WorldRenderer:
 
     def _draw_grid(self):
         """Dibuja una grilla en el plano XZ."""
-        grid_color = colors.GRAY  # Usar el color gris definido
+        grid_color = colors.GRAY
         glColor3f(grid_color[0] / 255.0, grid_color[1] / 255.0, grid_color[2] / 255.0)
-        glLineWidth(1.5)  # Grosor de las líneas de la grilla
-        grid_size = 50  # Espaciado entre líneas de la grilla
-        max_grid = 1000  # Extensión de la grilla
+        glLineWidth(1.5)
+        grid_size = 50
+        max_grid = 1000
 
         glBegin(GL_LINES)
         for i in range(-max_grid, max_grid + grid_size, grid_size):
-            # Líneas verticales (eje X)
             glVertex3f(i, 0, -max_grid)
             glVertex3f(i, 0, max_grid)
-
-            # Líneas horizontales (eje Z)
             glVertex3f(-max_grid, 0, i)
             glVertex3f(max_grid, 0, i)
         glEnd()
 
     def _draw_map(self, map_data, visible_segments):
-        # Dibuja los segmentos del mapa y los visibles
         for seg in map_data.segments:
             self._draw_segment(seg, is_visible=False)
         if visible_segments is not None:
@@ -184,7 +352,6 @@ class WorldRenderer:
                 self._draw_segment(seg, is_visible=True)
 
     def _draw_segment(self, seg, is_visible=False):
-        # Selecciona el color según si el segmento es visible
         if is_visible and "visible_wall" in self.theme:
             color = self.theme["visible_wall"]
             width = 3.0
@@ -208,10 +375,7 @@ class WorldRenderer:
         color = self.theme["player"]
         glColor3f(color[0] / 255.0, color[1] / 255.0, color[2] / 255.0)
 
-        # Dibujar círculo para el jugador (simulado con líneas)
         glBegin(GL_LINES)
-        import math
-
         for i in range(20):
             angle1 = (i / 20) * 2 * math.pi
             angle2 = ((i + 1) / 20) * 2 * math.pi
@@ -219,7 +383,6 @@ class WorldRenderer:
             glVertex2f(px + math.cos(angle2) * 4, py + math.sin(angle2) * 4)
         glEnd()
 
-        # Dibujar cono de visión (FOV)
         e1, e2 = player.fov_edges()
         color_fov = self.theme["fov"]
         glColor3f(color_fov[0] / 255.0, color_fov[1] / 255.0, color_fov[2] / 255.0)

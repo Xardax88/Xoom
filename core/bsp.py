@@ -62,18 +62,24 @@ class BSPBuilder:
 
         # clasificación
         for s in segs:
+
             if s is partition:
-                node.coplanar.append(s)
+                node.coplanar.append(s.replace())
                 continue
-            f, b = split_segment(s, partition.a, partition.b)
-            #if f:
-            #    front_list.extend(f)
-            #if b:
-            #    back_list.extend(b)
-            if f:
-                front_list.extend([s.replace(a=part.a, b=part.b) for part in f])
-            if b:
-                back_list.extend([s.replace(a=part.a, b=part.b) for part in b])
+
+            front_parts, back_parts = split_segment(s, partition.a, partition.b)
+
+            if front_parts is None and back_parts is None:
+                # el segmento no cruza la partición, se queda en coplanar
+                node.coplanar.append(s.replace())
+                continue
+
+            if front_parts:
+                front_list.extend([s.replace(a=part.a, b=part.b) for part in front_parts])
+                # front_list.extend(front_parts)
+            if back_parts:
+                back_list.extend([s.replace(a=part.a, b=part.b) for part in back_parts])
+                # back_list.extend(back_parts)
 
         # recursión
         node.front = self._build_recursive(front_list, depth + 1) if front_list else None

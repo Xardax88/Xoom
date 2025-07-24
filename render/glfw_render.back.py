@@ -94,6 +94,9 @@ class GLFW_OpenGLRenderer(IRenderer):
 
         glfw.make_context_current(self.window)
         glEnable(GL_DEPTH_TEST)
+        # Activar el cull face para ocultar las caras traseras
+        glEnable(GL_CULL_FACE)
+        glCullFace(GL_BACK)
 
         self._init_shaders()
 
@@ -459,6 +462,9 @@ class GLFW_OpenGLRenderer(IRenderer):
                 self._draw_segment(seg, is_visible=True)
 
     def _draw_segment(self, seg: Segment, is_visible: bool) -> None:
+        """
+        Dibuja un segmento en el minimapa y su normal como una pequeña línea.
+        """
         if is_visible and "visible_wall" in self.theme:
             color = self.theme["visible_wall"]
             width = 3.0
@@ -476,6 +482,29 @@ class GLFW_OpenGLRenderer(IRenderer):
         glVertex2f(seg.a.x, seg.a.y)
         glVertex2f(seg.b.x, seg.b.y)
         glEnd()
+
+        # --- Dibuja la normal de la pared como una línea corta ---
+        # Calcula el punto medio del segmento
+        mx = (seg.a.x + seg.b.x) / 2
+        my = (seg.a.y + seg.b.y) / 2
+        # Calcula la dirección normal (perpendicular)
+        dx = seg.b.x - seg.a.x
+        dy = seg.b.y - seg.a.y
+        length = (dx**2 + dy**2) ** 0.5
+        if length > 0:
+            # Normalizada y perpendicular (rotar 90 grados)
+            nx = -dy / length
+            ny = dx / length
+            # Longitud de la línea de la normal
+            normal_len = 12.0
+            # Color para la normal (cyan)
+            glColor3f(0, 1, 1)
+            glLineWidth(2.0)
+            glBegin(GL_LINES)
+            glVertex2f(mx, my)
+            glVertex2f(mx + nx * normal_len, my + ny * normal_len)
+            glEnd()
+        # ...existing code...
 
     def _draw_player(self, player: Player) -> None:
         px, py = player.x, player.y

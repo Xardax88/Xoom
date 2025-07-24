@@ -59,7 +59,6 @@ class TextureManager:
 
             return self._gl_ids[name]
         img = self.get_texture(name)
-        logger.debug(f"Textura {name} cargada desde disco")
         tex_id = glGenTextures(1)
         logger.debug(f"Cargando textura: {name}")
         glBindTexture(GL_TEXTURE_2D, tex_id)

@@ -9,7 +9,7 @@ import time
 from .map_data import MapData
 from .bsp import BSPNode
 from .player import Player
-from .visibility import compute_visible_segments
+from .visibility import VisibilityManager
 from render.renderer_base import IRenderer
 from core.collision import CollisionDetector
 
@@ -46,7 +46,7 @@ class Game:
                 self._update(dt)
 
                 # Calcular la lógica del juego (visibilidad)
-                self._visible_cache = compute_visible_segments(self.bsp_root, self.player)
+                self._visible_cache = VisibilityManager.compute_visible_segments(self.bsp_root, self.player)
 
                 # Dibujar el frame en el buffer oculto
                 self.renderer.draw_frame(
@@ -88,6 +88,7 @@ class Game:
             end = type(start)(self.player.x + dx, self.player.y + dy)
 
             col = self.collision.find_first_collision(start, end)
+            '''
             if col is not None:
                 # Mueve al jugador hasta justo antes del punto de colisión
                 safe_dist = 1.0  # distancia de seguridad
@@ -99,8 +100,9 @@ class Game:
                     self.player.x = new_pos.x
                     self.player.y = new_pos.y
                 # Si está muy cerca, no se mueve
-            else:
-                self.player.move(dx, dy)
+            else:'''
+            self.player.move(dx, dy)
+
 
     def _update(self, dt: float) -> None:  # noqa: ARG002 - dt usado en futuro
         pass

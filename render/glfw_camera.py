@@ -35,14 +35,10 @@ class Camera2D:
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
 
-        # 1. Mover el origen (0,0) al centro de la pantalla.
         glTranslatef(self.width / 2.0, self.height / 2.0, 0)
 
-        # 2. Aplicar el zoom (escala).
         glScalef(self.scale, self.scale, 1.0)
 
-        # 3. Mover el mundo para que el objetivo de la cámara quede en el centro.
-        #    Se usa la posición negativa del objetivo.
         glTranslatef(-self.x, -self.y, 0)
 
     def update_viewport(self, width: int, height: int) -> None:

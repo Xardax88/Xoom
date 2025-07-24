@@ -1,0 +1,21 @@
+# Mapa en L con columna central
+
+PLAYER_START -90 90
+
+# Rectángulo exterior (L)
+POLY world wall_placeholder 50
+-150 -100
+100 -100
+100 0
+0 0
+0 100
+-150 100
+END
+
+# Columna central (cuadrado pequeño)
+POLY column wall_placeholder 80
+-80 20
+-40 20
+-40 -20
+-80 -20
+END

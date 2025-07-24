@@ -6,6 +6,7 @@ Renderizador que utiliza GLFW para la ventana y PyOpenGL para el renderizado 2D 
 from __future__ import annotations
 import logging
 import math
+import numpy as np
 from typing import Dict, Any, Iterable, Optional
 
 import glfw
@@ -37,18 +38,46 @@ from OpenGL.GL import (
     glBindTexture,
     glTexCoord2f,
     GL_TEXTURE_2D,
+    shaders,
+    GL_VERTEX_SHADER,
+    GL_FRAGMENT_SHADER,
+    glUseProgram,
+    glGetAttribLocation,
+    glEnableVertexAttribArray,
+    glVertexAttribPointer,
+    glGetUniformLocation,
+    glUniform3f,
+    glUniformMatrix4fv,
+    glGenBuffers,
+    glBindBuffer,
+    glBufferData,
+    glDrawArrays,
+    glDisableVertexAttribArray,
+    glDeleteBuffers,
+    GL_ARRAY_BUFFER,
+    GL_FLOAT,
+    GL_QUADS,
+    GL_STATIC_DRAW,
+    glGetFloatv,
+    GL_MODELVIEW_MATRIX,
+    GL_PROJECTION_MATRIX,
+    GL_FALSE,
+    glRotatef,
+    glOrtho,
+    glViewport,
+    glMatrixMode,
 )
-from OpenGL.GLU import gluPerspective
-from OpenGL.raw.GL.VERSION.GL_1_0 import glRotatef
 
+from core.texture_manager import TextureManager
+from .glfw_camera import Camera2D
+from .world_renderer import WorldRenderer
+from .ui_renderer import UIRenderer
+from .renderer_base import IRenderer
 from core.map_data import MapData
 from core.player import Player
-from core.types import Segment, Vec2
 import settings
-from .renderer_base import IRenderer
-from .glfw_camera import Camera2D
+from core.types import Segment, Vec2
 from . import colors
-from core.texture_manager import TextureManager
 
 
 logger = logging.getLogger(__name__)
@@ -64,6 +93,11 @@ _KEYMAP = {
 }
 
 
+def load_shader_source(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
 class GLFW_OpenGLRenderer(IRenderer):
     """
     Renderizador que usa GLFW para la ventana y el contexto, y PyOpenGL
@@ -76,6 +110,21 @@ class GLFW_OpenGLRenderer(IRenderer):
         Devuelve la version de la biblioteca GLWF
         """
         return glfw.get_version_string().decode()
+
+    def _init_shaders(self):
+        vertex_src = load_shader_source("assets/shaders/wall.vert")
+        fragment_src = load_shader_source("assets/shaders/wall.frag")
+        if not vertex_src or not fragment_src:
+            raise RuntimeError("No se pudieron cargar los shaders")
+        logger.info("Compilando shaders OpenGL...")
+        try:
+            self.shader_program = shaders.compileProgram(
+                shaders.compileShader(vertex_src, GL_VERTEX_SHADER),
+                shaders.compileShader(fragment_src, GL_FRAGMENT_SHADER),
+            )
+        except Exception as e:
+            logger.error("Error al compilar los shaders: %s", e)
+            raise RuntimeError("Fallo al compilar los shaders OpenGL") from e
 
     def __init__(
         self,
@@ -91,8 +140,10 @@ class GLFW_OpenGLRenderer(IRenderer):
         # Configurar opciones de la ventana GLFW
         glfw.window_hint(glfw.DOUBLEBUFFER, True)
         glfw.window_hint(glfw.RESIZABLE, True)
-        glfw.swap_interval(1)
+        # glfw.swap_interval(1)
 
+        self.theme = color_theme if color_theme is not None else colors.default_theme()
+        self.world_renderer = WorldRenderer(self)
         self.texture_manager = TextureManager()
 
         self.width = width
@@ -106,20 +157,20 @@ class GLFW_OpenGLRenderer(IRenderer):
         glfw.make_context_current(self.window)
         glEnable(GL_DEPTH_TEST)
 
+        self._init_shaders()
+
         try:
             self.gl_version = glGetString(GL_VERSION).decode()
         except Exception as e:
             self.gl_version = "Unknown"
 
         glfw.set_window_size_callback(self.window, self._on_resize)
-        self.theme = color_theme if color_theme is not None else colors.default_theme()
+        self.world_renderer = WorldRenderer(self)
         self.camera = Camera2D(width=width, height=height, scale=scale)
         self._setup_gl(width, height)
 
     def get_opengl_version(self) -> str:
-        """
-        Devuelve la version de OpenGL utilizada
-        """
+        """Devuelve la version de OpenGL utilizada."""
         return self.gl_version
 
     def _setup_gl(self, width: int, height: int) -> None:
@@ -152,7 +203,28 @@ class GLFW_OpenGLRenderer(IRenderer):
         return not glfw.window_should_close(self.window)
 
     def poll_input(self) -> Dict[str, Any]:
-        state: Dict[str, Any] = {"turn": 0.0, "move": 0.0, "strafe": 0.0, "quit": False}
+        state = {
+            "turn": 0.0,
+            "move": 0.0,
+            "strafe": 0.0,
+            "quit": False,
+            "up": False,
+            "down": False,
+            "select": False,
+        }
+        if glfw.get_key(self.window, glfw.KEY_ESCAPE) == glfw.PRESS:
+            state["quit"] = True
+            glfw.set_window_should_close(self.window, True)
+            return state
+        if glfw.get_key(self.window, glfw.KEY_DOWN) == glfw.PRESS:
+            state["down"] = True
+        if glfw.get_key(self.window, glfw.KEY_UP) == glfw.PRESS:
+            state["up"] = True
+        if (
+            glfw.get_key(self.window, glfw.KEY_ENTER) == glfw.PRESS
+            or glfw.get_key(self.window, glfw.KEY_KP_ENTER) == glfw.PRESS
+        ):
+            state["select"] = True
 
         if glfw.get_key(self.window, glfw.KEY_ESCAPE) == glfw.PRESS:
             state["quit"] = True
@@ -163,6 +235,7 @@ class GLFW_OpenGLRenderer(IRenderer):
             if glfw.get_key(self.window, key) == glfw.PRESS:
                 if action in ("turn", "move", "strafe"):
                     state[action] += value
+
         return state
 
     def draw_frame(
@@ -179,185 +252,8 @@ class GLFW_OpenGLRenderer(IRenderer):
         glClearColor(0.0, 0.0, 0.0, 1.0)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)
 
-        self._setup_3d_projection(player)
-        self._draw_3d_world(player, visible_segments)
-        self._draw_grid()
-
-        if settings.ENABLE_MINIMAP:
-            self._setup_2d_projection()
-            self._draw_2d_minimap(map_data, player, visible_segments)
-
-    def _setup_3d_projection(self, player: Player) -> None:
-        """
-        Configura la mastriz para la vista del jugador
-        Args:
-             player
-        """
-
-        glMatrixMode(GL_PROJECTION)
-        glLoadIdentity()
-
-        aspect_ratio = self.width / self.height if self.height > 0 else 1.0
-
-        horizontal_fov_rad = math.radians(player.fov_deg)
-        vertical_fov_rad = 2 * math.atan(
-            math.tan(horizontal_fov_rad / 2) / aspect_ratio
-        )
-        vertical_fov_deg = math.degrees(vertical_fov_rad)
-
-        gluPerspective(vertical_fov_deg, aspect_ratio, 0.1, 2000.0)
-
-    def _setup_2d_projection(self) -> None:
-        """
-        Configura la matriz para la vista 2D
-        """
-        glMatrixMode(GL_PROJECTION)
-        glLoadIdentity()
-        # width, height = glfw.get_window_size(self.window)
-        glOrtho(0, self.width, 0, self.height, -1, 1)
-
-    def _draw_3d_world(
-        self,
-        player: Player,
-        visible_segments: Optional[Iterable[Segment]] = None,
-    ) -> None:
-        """
-        Dibuja el mapa en 3D.
-        Args:
-            player: El jugador.
-            visible_segments: Segmentos visibles.
-        """
-
-        # Configurar Camara
-        glMatrixMode(GL_MODELVIEW)
-        # glDepthFunc(GL_LESS)
-        glLoadIdentity()
-
-        glRotatef(player.angle_deg + 90, 0.0, 1.0, 0.0)
-        glTranslatef(-player.x, -settings.PLAYER_HEIGHT, -player.y)
-
-        # Dibujar las paredes visibles
-        if visible_segments:
-            for seg in visible_segments:
-                self._draw_3d_wall(seg)
-
-    def _draw_3d_wall(self, seg: Segment) -> None:
-        """
-        Dibuja una pared en 3D.
-        """
-        # logger.debug(f"Dibujando pared con textura: {seg.texture_name}")
-
-        h = seg.height if seg.height is not None else settings.WALL_HEIGHT
-        texture_name = seg.texture_name
-        if texture_name:
-            texture_id = self.texture_manager.get_gl_texture_id(texture_name)
-            glEnable(GL_TEXTURE_2D)
-            glBindTexture(GL_TEXTURE_2D, texture_id)
-            glColor3f(1, 1, 1)
-
-            glBegin(GL_QUADS)
-
-            # Escala de textura
-            tex_scale = (
-                settings.TEXTURE_SCALE if hasattr(settings, "TEXTURE_SCALE") else 1.0
-            )
-
-            # Longitud total del segmento original
-            total_length = (
-                seg.original_segment.length() if seg.original_segment else seg.length()
-            )
-
-            # Calcular UVs en base a la escala y el offset global
-            u_start = (seg.u_offset / tex_scale) if total_length > 0 else 0
-            u_end = (
-                ((seg.u_offset + seg.length()) / tex_scale) if total_length > 0 else 1
-            )
-
-            glTexCoord2f(u_start, 0)
-            glVertex3f(seg.a.x, 0, seg.a.y)
-
-            glTexCoord2f(u_end, 0)
-            glVertex3f(seg.b.x, 0, seg.b.y)
-
-            glTexCoord2f(u_end, 1)
-            glVertex3f(seg.b.x, h, seg.b.y)
-
-            glTexCoord2f(u_start, 1)
-            glVertex3f(seg.a.x, h, seg.a.y)
-
-            glEnd()
-            glDisable(GL_TEXTURE_2D)
-        else:
-            color = self.theme.get("wall_interior", (255, 255, 255))
-            dim_factor = 0.8
-            glColor3f(
-                color[0] / 255.0 * dim_factor,
-                color[1] / 255.0 * dim_factor,
-                color[2] / 255.0 * dim_factor,
-            )
-
-            glBegin(GL_QUADS)
-            # Vertices en el plano XZ, altura en Y
-            # Abajo-Izquierda
-            glVertex3f(seg.a.x, 0, seg.a.y)
-            # Abajo-Derecha
-            glVertex3f(seg.b.x, 0, seg.b.y)
-            # Arriba-Derecha
-            glVertex3f(seg.b.x, h, seg.b.y)
-            # Arriba-Izquierda
-            glVertex3f(seg.a.x, h, seg.a.y)
-            glEnd()
-
-    def _draw_grid(self) -> None:
-        """Dibuja una grilla en el plano XZ."""
-        grid_color = colors.GRAY  # Usar el color gris definido
-        glColor3f(grid_color[0] / 255.0, grid_color[1] / 255.0, grid_color[2] / 255.0)
-        glLineWidth(1.2)  # Grosor de las líneas de la grilla
-        grid_size = 50  # Espaciado entre líneas de la grilla
-        max_grid = 1000  # Extensión de la grilla
-
-        glBegin(GL_LINES)
-        for i in range(-max_grid, max_grid + grid_size, grid_size):
-            # Líneas verticales (eje X)
-            glVertex3f(i, 0, -max_grid)
-            glVertex3f(i, 0, max_grid)
-
-            # Líneas horizontales (eje Z)
-            glVertex3f(-max_grid, 0, i)
-            glVertex3f(max_grid, 0, i)
-        glEnd()
-
-    def _draw_2d_minimap(
-        self,
-        map_data: MapData,
-        player: Player,
-        visible_segments: Optional[Iterable[Segment]],
-    ) -> None:
-        """
-        Dibuja el minimapa 2D.
-        Args:
-            map_data: Los datos del mapa.
-            player: El jugador.
-            visible_segments: Segmentos visibles.
-        """
-
-        # Deshabilitar el test de profundidad
-        glDisable(GL_DEPTH_TEST)
-
-        # Configurar matrix de vista
-        glMatrixMode(GL_MODELVIEW)
-        glLoadIdentity()
-
-        # Camara 2D
-        self.camera.set_target(player.x, player.y)
-        self.camera.apply_transform()
-
-        # Dibujar el mapa
-        self._draw_map(map_data, visible_segments)
-        self._draw_player(player)
-
-        # Rehabilitar el test de profundidad
-        glEnable(GL_DEPTH_TEST)
+        self.world_renderer.draw_3d_world(player, visible_segments)
+        self.world_renderer.draw_2d_minimap(map_data, player, visible_segments)
 
     def dispatch_events(self) -> None:
         glfw.poll_events()
@@ -369,60 +265,10 @@ class GLFW_OpenGLRenderer(IRenderer):
         logger.info("Cerrando GLFW.")
         glfw.terminate()
 
-    # Métodos de dibujo internos (usando OpenGL)
-
-    def _draw_map(
-        self, map_data: MapData, visible_segments: Optional[Iterable[Segment]]
-    ) -> None:
-        for seg in map_data.segments:
-            self._draw_segment(seg, is_visible=False)
-        if visible_segments is not None:
-            for seg in visible_segments:
-                self._draw_segment(seg, is_visible=True)
-
-    def _draw_segment(self, seg: Segment, is_visible: bool) -> None:
-        if is_visible and "visible_wall" in self.theme:
-            color = self.theme["visible_wall"]
-            width = 3.0
-        else:
-            color = (
-                self.theme["wall_interior"]
-                if seg.interior_facing
-                else self.theme["wall_exterior"]
-            )
-            width = 1.0
-
-        glColor3f(color[0] / 255.0, color[1] / 255.0, color[2] / 255.0)
-        glLineWidth(width)
-        glBegin(GL_LINES)
-        glVertex2f(seg.a.x, seg.a.y)
-        glVertex2f(seg.b.x, seg.b.y)
-        glEnd()
-
-    def _draw_player(self, player: Player) -> None:
-        px, py = player.x, player.y
-        color = self.theme["player"]
-        glColor3f(color[0] / 255.0, color[1] / 255.0, color[2] / 255.0)
-
-        # Dibujar círculo para el jugador (simulado con líneas)
-        glBegin(GL_LINES)
-        import math
-
-        for i in range(20):
-            angle1 = (i / 20) * 2 * math.pi
-            angle2 = ((i + 1) / 20) * 2 * math.pi
-            glVertex2f(px + math.cos(angle1) * 4, py + math.sin(angle1) * 4)
-            glVertex2f(px + math.cos(angle2) * 4, py + math.sin(angle2) * 4)
-        glEnd()
-
-        # Dibujar cono de visión (FOV)
-        e1, e2 = player.fov_edges()
-        color_fov = self.theme["fov"]
-        glColor3f(color_fov[0] / 255.0, color_fov[1] / 255.0, color_fov[2] / 255.0)
-        glLineWidth(1.0)
-        glBegin(GL_LINES)
-        glVertex2f(px, py)
-        glVertex2f(e1.x, e1.y)
-        glVertex2f(px, py)
-        glVertex2f(e2.x, e2.y)
-        glEnd()
+    def draw_main_menu(self, options, selected_index):
+        """
+        Dibuja el menú principal usando UIRenderer.
+        """
+        if not hasattr(self, "ui_renderer"):
+            self.ui_renderer = UIRenderer(self)
+        self.ui_renderer.draw_main_menu(options, selected_index)

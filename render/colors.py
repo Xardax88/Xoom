@@ -1,4 +1,6 @@
-"""Colores por defecto (R,G,B)."""
+"""
+Colores por defecto (R,G,B).
+"""
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)

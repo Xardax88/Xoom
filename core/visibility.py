@@ -18,6 +18,7 @@ def compute_visible_segments(
     root: BSPNode,
     player: Player,
     max_dist: float | None = None,
+    clip_to_fov: bool = False,
 ) -> List[Segment]:
     """Devuelve los segmentos que caen dentro del FOV angular + rango del jugador."""
     if max_dist is None:
@@ -35,7 +36,9 @@ def compute_visible_segments(
     covered: list[tuple[float, float]] = []  # intervalos angulares ya cubiertos
     visible: list[Segment] = []
 
+
     for seg in ordered:
+
         clipped_list = _clip_segment_to_triangle_multi(seg, tri)
         for clipped in clipped_list:
             # Calcular ángulos de los extremos respecto al jugador
@@ -74,6 +77,7 @@ def compute_visible_segments(
                 )
                 covered.append((ia, ib))
             covered = _merge_intervals(covered)
+
     return visible
 
 # ---------------------------------------------------------------------------

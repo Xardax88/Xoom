@@ -57,7 +57,7 @@ class CollisionDetector:
         return None
 
     @staticmethod
-    def is_between(a, b, p):
+    def is_between(a, b, p, margin=2.0):
         minx, maxx = sorted([a.x, b.x])
         miny, maxy = sorted([a.y, b.y])
-        return minx - 1e-6 <= p.x <= maxx + 1e-6 and miny - 1e-6 <= p.y <= maxy + 1e-6
+        return minx - margin <= p.x <= maxx + margin and miny - margin <= p.y <= maxy + margin

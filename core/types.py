@@ -1,4 +1,7 @@
-"""Tipos básicos y utilitarios para Xoom."""
+"""
+Tipos básicos y utilitarios para Xoom.
+"""
+
 from __future__ import annotations
 import math
 from dataclasses import dataclass, replace as dataclass_replace

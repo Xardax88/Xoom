@@ -58,3 +58,12 @@ class IRenderer(ABC):
     def shutdown(self) -> None:
         """Limpia los recursos del renderizador (p. ej. al cerrar)."""
         ...
+
+    @abstractmethod
+    def draw_main_menu(self, options, selected_index) -> None:
+        """
+        Dibuja el menú principal del juego con las opciones disponibles.
+        `options` es una lista de cadenas y `selected_index` indica cuál
+        opción está seleccionada.
+        """
+        ...

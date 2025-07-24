@@ -1,158 +1,131 @@
-# Xoom - Motor Estilo Doom en Python 🐍
+[Inglish 🇺🇸](README) /
+[Español 🇦🇷](README_ES)
+# Xoom - Doom-Style Engine in Python 🐍
 
-Un motor de juego 3D estilo Doom implementado en Python.
+A 3D "raycasting" game engine inspired by classics like Doom, implemented in Python and OpenGL.
 
-![Status](https://img.shields.io/badge/status-working%20progress-indigo)
-![GitHub last commit](https://img.shields.io/github/last-commit/Xardax88/Xoom)
-![Tamaño del Repo](https://img.shields.io/github/repo-size/Xardax88/Xoom)
-[![GitHub License](https://img.shields.io/github/license/Xardax88/Xoom)](LICENSE)
-![Python Version](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)
+[![Project Status](https://img.shields.io/badge/status-in%20development-indigo)](https://github.com/Xardax88/Xoom)
+[![Last Commit](https://img.shields.io/github/last-commit/Xardax88/Xoom)](https://github.com/Xardax88/Xoom/commits/main)
+[![Repo Size](https://img.shields.io/github/repo-size/Xardax88/Xoom)](https://github.com/Xardax88/Xoom)
+[![License](https://img.shields.io/github/license/Xardax88/Xoom)](LICENSE)
+[![Python Version](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-![PyOpenGL Version](https://img.shields.io/badge/PyOpenGL-3.1+-blue)
-![GLFW Version](https://img.shields.io/badge/GLFW-3.4+-blue)
 
-## Descripción
+<!-- **Add here a screenshot or GIF of the project in action** -->
+<!-- ![Xoom Demo GIF](URL_OF_GIF_HERE) -->
 
-El objetivo es recrear la experiencia de juegos clásicos como Doom y Duke Nukem 3D, utilizando técnicas de renderizado 2.5D y un sistema de mapas basado en polígonos. 
-Además de poner a prueba mis habilidades de programación en Python y OpenGL.
+## About the Project
 
-En su momento, realize un proyecto similar en C++, pero desgraciadamente se perdió el código fuente. Asi que esta vez lo estoy haciendo desde cero en Python aplicando lo aprendido, y guardando mi avance en GitHub.
+**Xoom** is a personal journey to recreate the magic of 90s first-person shooters like Doom and Duke Nukem 3D.
+This project uses 2.5D rendering techniques (raycasting over a 2D map) and a polygon-based map system to build levels.
 
-En un futuro planeo portar el render a Vulkan para aprender a utilizar la API.
+It was born out of nostalgia and challenge. Years ago, I developed a similar engine in C++, but the code was lost over time.
+This is my attempt to rebuild it from scratch, applying new knowledge, this time in Python, and documenting every step on GitHub.
 
-## Características
+The long-term goal is not only to revive that gaming experience but also to use this project as a testbed to learn the Vulkan API, planning a future migration of the renderer.
 
-- **Carga de mapas por vectores**: Los mapas se definen como polígonos usando coordenadas 2D
-- **Árbol BSP**: Partición binaria del espacio para renderizado eficiente
-- **Sistema de logging**: Registro completo de eventos y errores
+## Table of Contents
+- [About the Project](#about-the-project)
+- [Main Features](#main-features)
+- [Built With](#built-with)
+- [Getting Started](#getting-started)
+- [Controls](#controls)
+- [Roadmap](#roadmap)
+- [Map Format](#map-format)
+- [License](#license)
+- [Contact](#contact)
+- [Contributing](#contributing)
 
-## Estructura del Proyecto
+### Main Features
 
-```
-Xoom/
-├─ assets/
-│  ├─ maps/
-│  │  └─ E1M1.xmap
-│  ├─ textures/
-│  │  └─ wall_placeholder.png
-├─ core/
-│  ├─ __init__.py
-│  ├─ bsp.py
-│  ├─ collision.py
-│  ├─ errors.py
-│  ├─ game.py
-│  ├─ map_data.py
-│  ├─ map_loader.py
-│  ├─ player.py
-│  ├─ texture_manager.py
-│  ├─ types.py
-│  └─ visibility.py
-├─ logs/
-├─ render/
-│  ├─ __init__.py
-│  ├─ colors.py
-│  ├─ glfw_camera.py
-│  ├─ glfw_render.py
-│  └─ renderer_base.py
-├─ utils/
-│  ├─ __init__.py
-│  ├─ logging_setup.py
-│  └─ math_utils.py
-├─ settings.py
-├─ main.py
-└─ requirements.txt
-```
+-   **Vector-Based Map Loading**: Levels are defined using polygons and segments in simple text files.
+-   **BSP Tree**: Binary Space Partitioning is used for efficient map geometry management and rendering.
+-   **3D Rendering**: Projects a 2D map into a 3D environment, rendering walls with height and perspective.
+-   **Collision System**: Simple collision detection between the player and environment walls.
+-   **Modern Shaders**: Uses GLSL for the rendering pipeline.
+-   **Detailed Logging**: Logs events from map loading to rendering errors to facilitate debugging.
 
-## Requisitos
+### Built With
 
-- Python 3.11 o superior
-- PyOpenGL 3.1+
-- GLFW 3.4+
-- NumPy 1.23+
-- Pillow 9.0+
+This project was made possible thanks to the following technologies:
 
-## Instalación
+-   [Python 3.11+](https://www.python.org/)
+-   [PyOpenGL](https://mcfletch.github.io/pyopengl/)
+-   [GLFW](https://www.glfw.org/)
+-   [NumPy](https://numpy.org/)
+-   [Pillow](https://python-pillow.github.io/)
 
-1. Clonar el repositorio
-2. Instalar dependencias: `pip install -r requirements.txt`
-3. Ejecutar: `python main.py`
+## Getting Started
 
-## Controles
+Follow these steps to get a local copy of the project running.
 
-- **W**: Mover adelante
-- **S**: Mover atrás  
-- **A**: Girar izquierda
-- **D**: Girar derecha
-- **Q**: Desplazamiento lateral izquierda
-- **E**: Desplazamiento lateral derecha
-- **ESC**: Salir
+### Prerequisites
 
-## Formato de Mapas
+Make sure you have Python 3.11 or higher installed.
 
-Los mapas se definen en archivos de .xmap con el siguiente formato:
+-   **Python 3.11+**
 
-```
-# Comentarios empiezan con #
-# Los polígonos se definen con coordenadas X Y por cada vértice
-# POLY <nombre> <textura> <altura>
-# Define un polígono con un nombre específico
-# Las coordenadas son en el formato X Y
-# El polígono termina con END
-# El poligono puede tener mas de 4 vértices
-#
-# SEG <nombre> <textura> <altura>
-# Define un segmento de línea con un nombre específico
-# Las coordenadas son en el formato X Y
-# El segmento termina con END
-#
-# PLAYER_START Defines la posición inicial del jugador
+### Installation
 
-PLAYER_START -10 20
+1.  Clone the repository to your local machine:
+    ```bash
+    git clone https://github.com/Xardax88/Xoom
+    cd Xoom
+    ```
 
-# Polígonos en sentido horario = paredes interiores (sólidas)
-POLY column column01 50
--80 -20
-20 -20
-20 20
--20 20
-END
+2. Run the install script to install dependencies:
+    ```bash
+    python -m pip install -r requirements.txt
+    ```
 
-# Polígonos en sentido anti-horario = áreas exteriores
-POLY walls wall01 50
--100 100
-100 100
-100 -100
--100 -100
-END
-```
+3. Run the game:
+    ```bash
+    python main.py
+    ```
 
-## Configuración
+### Controls
 
-Todas las configuraciones se encuentran en `settings.py`:
+- W: Move forward
+- S: Move backward
+- A: Turn left
+- D: Turn right
+- Q: Strafe left
+- E: Strafe right
+- ESC: Exit the game
 
-- Resolución de pantalla
-- FPS objetivo
-- Velocidad del jugador
-- Colores y estilos
-- Configuración de logging
+### Roadmap
 
-## Logging
+- [x] Load maps from .xmap files
+- [x] BSP Tree construction
+- [x] 3D wall rendering
+  - [x] Rendering with GLSL shaders
+  - [x] Apply textures to walls
+- [x] Player movement and collisions
+- [ ] Render floors and ceilings with textures
+- [ ] Implement sprites for enemies and objects
+- [ ] Lighting system (sectors with different brightness)
+- [ ] Add sound effects and music
+- [ ] Port the renderer to Vulkan
 
-El sistema registra automáticamente:
+Check the open issues for a complete list of proposed features (and known bugs).
 
-- Carga de mapas y errores
-- Construcción del árbol BSP
-- Eventos de inicialización
-- Errores de renderizado
+### Map Format
 
-Los logs se guardan en la carpeta `logs/` con timestamp.
+Maps are defined in .xmap files. The syntax is simple and text-based.
+- Comments: Any line starting with # is ignored.
+- PLAYER_START: Defines the initial X Y position and angle A of the player.
+- POLY: Defines a polygon. Syntax is POLY <name> <texture> <height>.
 
-## Próximas Características
+Vertices are listed below, one per line, and closed with END.
+- Clockwise polygons are considered interior walls (Columns).
+- Counterclockwise polygons define exterior areas (Rooms).
+- SEG: Defines a line segment (an individual wall). Syntax is SEG <name> <texture> <height>.
 
-- Renderizado 3D completo
-- Texturas en paredes
-- Texturas techos y suelos
-- Soporte para enemigos y objetos
-- Efectos de iluminación
-- Soporte para sprites
-- Audio
+## License
+
+Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
+
+## Contact
+[Xardax88](https://github.com/Xardax88) (Paragoni Maximiliano) - [@Xardax88](https://twitter.com/Xardax88)
+
+Project Link: https://github.com/Xardax88/Xoom

@@ -1,4 +1,6 @@
-"""Funciones matemáticas auxiliares."""
+"""
+Funciones matemáticas auxiliares.
+"""
 
 from __future__ import annotations
 from typing import Iterable, List

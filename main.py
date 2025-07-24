@@ -24,6 +24,8 @@ from core.map_loader import FileMapLoader
 from core.bsp import BSPBuilder
 from core.player import Player
 from core.game import Game
+from core.main_menu import MainMenu
+
 from render.glfw_render import GLFW_OpenGLRenderer
 
 
@@ -135,6 +137,15 @@ class GameRunner:
 
             self._initialize_renderer()
             self._log_system_info()
+
+            # Mostrar menú principal
+            menu = MainMenu(self.renderer)
+            opcion = menu.show()
+            if opcion != "Jugar":
+                logger.info("Saliendo por menú.")
+                self.renderer.shutdown()
+                return
+
             self._load_map()
             self._build_bsp_tree()
             self._initialize_player()

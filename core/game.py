@@ -69,10 +69,9 @@ class Game:
             self.stop()
             return
 
-        # Aplicar input al jugador
         turn = inp.get("turn", 0.0)
         if turn:
-            self.player.rotate(turn * dt) # Aplicar dt
+            self.player.rotate(turn * dt)
 
         move = inp.get("move", 0.0)
         strafe = inp.get("strafe", 0.0)
@@ -82,18 +81,24 @@ class Game:
             fx = math.cos(ang); fy = math.sin(ang)
             rx = math.cos(ang + math.pi/2); ry = math.sin(ang + math.pi/2)
 
-            # Aplicar dt al vector de movimiento
             dx = (fx * move + rx * strafe) * dt
             dy = (fy * move + ry * strafe) * dt
 
             start = self.player.pos
-            # El final ya tiene dt aplicado
             end = type(start)(self.player.x + dx, self.player.y + dy)
 
             col = self.collision.find_first_collision(start, end)
             if col is not None:
-                # Por el momento solo se detiene al colisionar
-                pass
+                # Mueve al jugador hasta justo antes del punto de colisión
+                safe_dist = 1.0  # distancia de seguridad
+                dir_vec = col - start
+                dist = math.hypot(dir_vec.x, dir_vec.y)
+                if dist > safe_dist:
+                    factor = (dist - safe_dist) / dist
+                    new_pos = start + dir_vec * factor
+                    self.player.x = new_pos.x
+                    self.player.y = new_pos.y
+                # Si está muy cerca, no se mueve
             else:
                 self.player.move(dx, dy)
 

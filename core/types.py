@@ -44,6 +44,12 @@ class Segment:
     height: float | None = None
     original_segment: Optional["Segment"] = None
     polygon_name: Optional[str] = None
+    # --- NUEVO: atributos para soporte de portales ---
+    portal_section: str = None  # "top", "bottom" o None
+    portal_h1_a: float = 0.0
+    portal_h1_b: float = 0.0
+    portal_h2_a: float = 0.0
+    portal_h2_b: float = 0.0
 
     def __post_init__(self):
         """

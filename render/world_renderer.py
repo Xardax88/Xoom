@@ -46,14 +46,14 @@ class WorldRenderer:
         glTranslatef(-player.x, -settings.PLAYER_HEIGHT, -player.y)
 
         # --- Renderizado del mundo ---
-        # 1. Dibujar el suelo de los polígonos visibles
+        # Dibujar el suelo de los polígonos visibles
         self._draw_floors(map_data, visible_segments)
 
-        # 2. Dibujar las paredes visibles, asegurando que cada segmento se dibuje solo una vez
+        # Dibujar las paredes visibles, asegurando que cada segmento se dibuje solo una vez
         drawn_segments = set()
         if visible_segments:
             for seg in visible_segments:
-                # Creamos una clave única para cada segmento usando sus extremos y polígono
+                # Crea una clave única para cada segmento usando sus extremos y polígono
                 seg_key = (
                     round(seg.a.x, 5),
                     round(seg.a.y, 5),
@@ -66,7 +66,7 @@ class WorldRenderer:
                 drawn_segments.add(seg_key)
                 self._draw_3d_wall(seg, player)
 
-        # 3. Dibujar grilla (opcional, puedes comentarla para ver mejor el suelo)
+        # Dibujar grilla
         # self._draw_grid()
 
     def draw_2d_minimap(self, map_data: MapData, player: Player, visible_segments):
@@ -345,12 +345,15 @@ class WorldRenderer:
         color = self.theme["player"]
         glColor3f(color[0] / 255.0, color[1] / 255.0, color[2] / 255.0)
 
-        glBegin(GL_LINES)
-        for i in range(20):
-            angle1 = (i / 20) * 2 * math.pi
-            angle2 = ((i + 1) / 20) * 2 * math.pi
-            glVertex2f(px + math.cos(angle1) * 4, py + math.sin(angle1) * 4)
-            glVertex2f(px + math.cos(angle2) * 4, py + math.sin(angle2) * 4)
+        # Dibujar el círculo de colisión real del jugador
+        player_radius = getattr(settings, "PLAYER_COLLISION_RADIUS", 16.0)
+        glBegin(GL_LINE_LOOP)
+        for i in range(32):
+            angle = (i / 32) * 2 * math.pi
+            glVertex2f(
+                px + math.cos(angle) * player_radius,
+                py + math.sin(angle) * player_radius,
+            )
         glEnd()
 
         e1, e2 = player.fov_edges()

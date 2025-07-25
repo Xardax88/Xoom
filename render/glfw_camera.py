@@ -12,7 +12,7 @@ from OpenGL.GL import glLoadIdentity, glMatrixMode, glScalef, glTranslatef, GL_M
 @dataclass
 class Camera2D:
     """
-    Gestiona la vista 2D (posición, zoom) y aplica las transformaciones
+    Gestiona la vista 2D y aplica las transformaciones
     a la matriz de OpenGL.
     """
 

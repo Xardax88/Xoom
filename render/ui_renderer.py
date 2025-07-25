@@ -102,9 +102,9 @@ class UIRenderer:
             y = start_y + i * (btn_h + spacing)
 
             # Crear la matriz de modelo para este botón específico
-            # 1. Escalar nuestro quad de 1x1 al tamaño del botón
+            # Escalar nuestro quad de 1x1 al tamaño del botón
             scale_matrix = np.diag([btn_w, btn_h, 1, 1]).astype(np.float32)
-            # 2. Mover el quad escalado a su posición en la pantalla
+            # Mover el quad escalado a su posición en la pantalla
             trans_matrix = np.identity(4, dtype=np.float32)
             trans_matrix[3, 0] = x
             trans_matrix[3, 1] = y

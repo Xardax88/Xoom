@@ -98,10 +98,12 @@ Asegúrate de tener instalado Python 3.11 o una versión superior.
 - [x] Carga de mapas desde archivos .xmap
 - [x] Construcción de Árbol BSP
 - [x] Renderizado 3D de paredes
-  - [x] Renderizado mediante shaders GLSL
+  - [x] Renderizado mediante shaders GLSL con texturas
   - [x] Aplicar texturas a las paredes
 - [x] Movimiento y colisiones del jugador
-- [ ] Renderizar suelos y techos con texturas
+- [x] Renderizar suelos
+  - [x] Renderizado mediante shaders GLSL con texturas
+- [ ] Renderizar techos
 - [ ] Implementar sprites para enemigos y objetos
 - [ ] Sistema de iluminación (sectores con diferente brillo)
 - [ ] Añadir efectos de sonido y música

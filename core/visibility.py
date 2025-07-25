@@ -22,7 +22,6 @@ class VisibilityManager:
     Todos los métodos son estáticos para cumplir SRP y facilitar el testeo.
     """
 
-    # --- NUEVO: Opción global para activar/desactivar el clipping de paredes ---
     clip_walls_to_fov: bool = True
     """
     Si es True, los segmentos de pared se recortan por el triángulo del FOV.
@@ -204,25 +203,15 @@ class VisibilityManager:
         return result
 
     @staticmethod
-    def _merge_intervals(intervals, epsilon=1e-5):
-        """
-        Une intervalos solapados o adyacentes, considerando un margen de tolerancia (epsilon).
-        Esto ayuda a evitar pequeños huecos entre paredes adyacentes por errores de precisión.
-        Args:
-            intervals (list[tuple[float, float]]): Lista de intervalos (start, end).
-            epsilon (float): Margen de tolerancia para fusionar intervalos cercanos.
-        Returns:
-            list[tuple[float, float]]: Lista de intervalos fusionados.
-        """
+    def _merge_intervals(intervals):
+        """Une intervalos solapados."""
         if not intervals:
             return []
-        # Ordenar los intervalos por el inicio
         intervals = sorted(intervals)
         merged = [intervals[0]]
         for s, e in intervals[1:]:
             last_s, last_e = merged[-1]
-            # Si los intervalos se solapan o están muy cerca, fusionarlos
-            if s <= last_e + epsilon:
+            if s <= last_e:
                 merged[-1] = (last_s, max(last_e, e))
             else:
                 merged.append((s, e))

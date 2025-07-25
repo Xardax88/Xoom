@@ -32,7 +32,6 @@ class WorldRenderer:
         Renderiza el mundo 3D usando los segmentos visibles completos.
         Además, dibuja las caras del suelo de cada polígono del mapa.
         """
-
         glEnable(GL_DEPTH_TEST)
         glEnable(GL_CULL_FACE)
         # Configura proyección 3D
@@ -50,9 +49,21 @@ class WorldRenderer:
         # 1. Dibujar el suelo de los polígonos visibles
         self._draw_floors(map_data, visible_segments)
 
-        # 2. Dibujar las paredes visibles
+        # 2. Dibujar las paredes visibles, asegurando que cada segmento se dibuje solo una vez
+        drawn_segments = set()
         if visible_segments:
             for seg in visible_segments:
+                # Creamos una clave única para cada segmento usando sus extremos y polígono
+                seg_key = (
+                    round(seg.a.x, 5),
+                    round(seg.a.y, 5),
+                    round(seg.b.x, 5),
+                    round(seg.b.y, 5),
+                    seg.polygon_name,
+                )
+                if seg_key in drawn_segments:
+                    continue
+                drawn_segments.add(seg_key)
                 self._draw_3d_wall(seg, player)
 
         # 3. Dibujar grilla (opcional, puedes comentarla para ver mejor el suelo)
@@ -149,15 +160,17 @@ class WorldRenderer:
                 if not poly_vertices or len(poly_vertices) < 3:
                     continue
 
-                # --- Configuración por polígono (textura o color) ---
-                use_texture = (
-                    seg.texture_name and seg.texture_name != "floor_placeholder"
+                # --- CAMBIO CLAVE: Consultar la textura de suelo del polígono ---
+                floor_texture_name = map_data.polygon_floor_textures.get(
+                    seg.polygon_name
                 )
+                use_texture = floor_texture_name is not None
+
                 glUniform1i(use_texture_loc, GL_TRUE if use_texture else GL_FALSE)
 
                 if use_texture:
                     texture_id = self.renderer.texture_manager.get_gl_texture_id(
-                        seg.texture_name
+                        floor_texture_name
                     )
                     glActiveTexture(GL_TEXTURE0)
                     glBindTexture(GL_TEXTURE_2D, texture_id)
@@ -169,7 +182,6 @@ class WorldRenderer:
 
                 # --- Preparación de Vértices (Posición + UVs) ---
                 vertex_data = []
-                # --- CAMBIO CLAVE: Iteramos sobre los vértices en orden INVERSO ---
                 for v in reversed(poly_vertices):
                     vertex_data.extend(
                         [
@@ -208,84 +220,42 @@ class WorldRenderer:
 
         glUseProgram(0)
 
-        """
-        if not visible_segments or not map_data.polygons:
-            return
-
-        floor_color = self.theme.get("floor", colors.DARK_GRAY)
-        glColor3f(
-            floor_color[0] / 255.0, floor_color[1] / 255.0, floor_color[2] / 255.0
-        )
-
-        # Desactivamos los shaders para dibujar con color fijo (modo inmediato)
-        glUseProgram(0)
-
-        # Usamos un set para no dibujar el mismo polígono varias veces
-        drawn_polygons = set()
-
-        for seg in visible_segments:
-            # Si el segmento pertenece a un polígono y no lo hemos dibujado ya
-            # logger.debug(" Polígono: %s", seg.polygon_name)
-
-            if seg.polygon_name and seg.polygon_name not in drawn_polygons:
-                # Lo marcamos como dibujado
-                drawn_polygons.add(seg.polygon_name)
-
-                # Obtenemos sus vértices desde map_data
-                poly_vertices = map_data.polygons.get(seg.polygon_name)
-                logger.debug(
-                    " Dibujando polígono: %s con vértices %s",
-                    seg.polygon_name,
-                    poly_vertices,
-                )
-                if poly_vertices:
-                    glBegin(GL_POLYGON)
-                    for vertex in poly_vertices:
-                        # Dibujamos el polígono en el plano Y=0
-                        glVertex3f(vertex.x, 0, vertex.y)
-                    glEnd()
-        """
-
     def _draw_3d_wall(self, seg: Segment, player: Player):
+        """
+        Dibuja un segmento de pared en 3D solo si la cara visible está orientada hacia el jugador.
+        Utiliza el atributo interior_facing para decidir la orientación.
+        Si interior_facing es True (columnas), la cara visible es la interior (normal hacia fuera).
+        Si interior_facing es False (habitaciones), la cara visible es la exterior (normal hacia dentro).
+        """
+        # --- Lógica de visibilidad de la cara ---
+        wall_dx = seg.b.x - seg.a.x
+        wall_dy = seg.b.y - seg.a.y
+        normal_x = -wall_dy
+        normal_y = wall_dx
+        mid_x = (seg.a.x + seg.b.x) / 2
+        mid_y = (seg.a.y + seg.b.y) / 2
+        to_player_x = player.x - mid_x
+        to_player_y = player.y - mid_y
+        dot = normal_x * to_player_x + normal_y * to_player_y
+
         shader = self.renderer.shader_program
         if not shader:
             return
         glUseProgram(shader)
 
         h = seg.height if seg.height is not None else settings.WALL_HEIGHT
-
         tex_scale = (
             settings.TEXTURE_SCALE if hasattr(settings, "TEXTURE_SCALE") else 1.0
         )
-
         u_start = seg.u_offset / tex_scale
         u_end = (seg.u_offset + seg.length()) / tex_scale
 
-        # Definimos los puntos de inicio y fin del segmento de la pared.
-        # Dependiendo de la orientación de la cara, los usaremos en un orden u otro.
-        v_start = seg.a
-        v_end = seg.b
-
-        if seg.interior_facing:
-            # La cara visible es la interior. El orden CCW visto desde dentro es:
-            # start -> end -> end_top -> start_top
-            # Esto corresponde a los vértices (a, b, b_top, a_top)
-            p1, p2 = v_start, v_end
-            uv1, uv2 = u_start, u_end
-
-        else:
-            # La cara visible es la exterior. El orden CCW visto desde fuera es:
-            # end -> start -> start_top -> end_top
-            # Esto corresponde a los vértices (b, a, a_top, b_top)
-            p1, p2 = v_end, v_start
-            uv1, uv2 = u_end, u_start
-
-        p1, p2 = v_start, v_end
+        p1, p2 = seg.a, seg.b
         uv1, uv2 = u_start, u_end
 
+        # --- Preparación de los vértices para OpenGL ---
         vertices = np.array(
             [
-                # Vértices definidos dinámicamente para ser siempre CCW en la cara visible
                 [p1.x, 0, p1.y, uv1, 0],  # Abajo-Izquierda
                 [p2.x, 0, p2.y, uv2, 0],  # Abajo-Derecha
                 [p2.x, h, p2.y, uv2, 1],  # Arriba-Derecha

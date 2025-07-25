@@ -14,6 +14,8 @@ class MapData:
     segments: List[Segment] = field(default_factory=list)
     # Almacenará los polígonos por su nombre. Ej: {'world0': [Vec2(..), ...]}
     polygons: Dict[str, List[Vec2]] = field(default_factory=dict)
+    # Nuevo: Mapea nombre de polígono a textura de suelo
+    polygon_floor_textures: Dict[str, str] = field(default_factory=dict)
     player_start: Vec2 = field(default_factory=lambda: Vec2(0, 0))
     bsp_root: "BSPNode" = None  # noqa: F821 - Forward reference
 

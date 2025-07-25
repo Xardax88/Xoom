@@ -22,10 +22,13 @@ class VisibilityManager:
     Todos los métodos son estáticos para cumplir SRP y facilitar el testeo.
     """
 
+    # --- NUEVO: Opción global para activar/desactivar el clipping de paredes ---
     clip_walls_to_fov: bool = True
     """
     Si es True, los segmentos de pared se recortan por el triángulo del FOV.
     Si es False, los segmentos se muestran completos si están dentro del FOV.
+    Puedes modificar este valor en tiempo de ejecución:
+        VisibilityManager.clip_walls_to_fov = False  # para desactivar el clipping
     """
 
     fov_margin_deg: float = 10.0
@@ -102,11 +105,31 @@ class VisibilityManager:
             ),
         )
 
+        # --- NUEVO: Si el clipping está desactivado, solo filtra por orientación y distancia ---
+        if not clip:
+            visible: list[Segment] = []
+            for seg in ordered:
+                if not VisibilityManager._is_segment_facing_player(seg, player.pos):
+                    continue
+                # Filtrar por distancia máxima (ambos extremos)
+                if (
+                    (seg.a.x - pos.x) ** 2 + (seg.a.y - pos.y) ** 2 > max_d2
+                    and (seg.b.x - pos.x) ** 2 + (seg.b.y - pos.y) ** 2 > max_d2
+                ):
+                    continue
+                visible.append(seg)
+            return visible
+
+        # --- Si el clipping está activado, usar el algoritmo completo ---
         # Lista de intervalos angulares cubiertos, ordenada y optimizada
         covered: list[tuple[float, float]] = []
         visible: list[Segment] = []
 
         for seg in ordered:
+            # --- FILTRO: Solo considerar segmentos orientados hacia el jugador ---
+            if not VisibilityManager._is_segment_facing_player(seg, player.pos):
+                continue  # El jugador está "detrás" de la pared, no es visible
+
             # Selección de método de recorte según configuración
             if clip:
                 clipped_list = VisibilityManager._clip_segment_to_triangle_multi(seg, tri)
@@ -181,15 +204,25 @@ class VisibilityManager:
         return result
 
     @staticmethod
-    def _merge_intervals(intervals):
-        """Une intervalos solapados."""
+    def _merge_intervals(intervals, epsilon=1e-5):
+        """
+        Une intervalos solapados o adyacentes, considerando un margen de tolerancia (epsilon).
+        Esto ayuda a evitar pequeños huecos entre paredes adyacentes por errores de precisión.
+        Args:
+            intervals (list[tuple[float, float]]): Lista de intervalos (start, end).
+            epsilon (float): Margen de tolerancia para fusionar intervalos cercanos.
+        Returns:
+            list[tuple[float, float]]: Lista de intervalos fusionados.
+        """
         if not intervals:
             return []
+        # Ordenar los intervalos por el inicio
         intervals = sorted(intervals)
         merged = [intervals[0]]
         for s, e in intervals[1:]:
             last_s, last_e = merged[-1]
-            if s <= last_e:
+            # Si los intervalos se solapan o están muy cerca, fusionarlos
+            if s <= last_e + epsilon:
                 merged[-1] = (last_s, max(last_e, e))
             else:
                 merged.append((s, e))
@@ -389,6 +422,8 @@ class VisibilityManager:
     def _interpolate_u_offset(original: Segment, p: Vec2) -> float:
         """
         Proyecta el punto p sobre el segmento original y calcula el u_offset correspondiente.
+        Corrige el sentido de la interpolación para paredes exteriores (interior_facing=False)
+        para que el mapeo UV sea coherente tras el clipping.
         """
         ax, ay = original.a.x, original.a.y
         bx, by = original.b.x, original.b.y
@@ -396,6 +431,41 @@ class VisibilityManager:
         length = math.hypot(dx, dy)
         if length == 0:
             return original.u_offset
+        # Calcular t como proyección de p sobre el segmento
         t = ((p.x - ax) * dx + (p.y - ay) * dy) / (length * length)
         t = max(0.0, min(1.0, t))
+        # Si la pared es exterior (habitaciones), invertir la interpolación
+        if not original.interior_facing:
+            t = 1.0 - t
         return original.u_offset + t * length
+
+    @staticmethod
+    def _is_segment_facing_player(seg: Segment, player_pos: Vec2) -> bool:
+        """
+        Determina si el segmento está orientado hacia el jugador.
+        Devuelve True si la cara visible del segmento está orientada hacia el jugador,
+        False si el jugador está "detrás" de la pared.
+
+        La lógica compara el signo del producto escalar de la normal con la posición del jugador
+        y el valor de interior_facing, para que coincida con la convención de orientación.
+        """
+        # Vector de la pared
+        wall_dx = seg.b.x - seg.a.x
+        wall_dy = seg.b.y - seg.a.y
+        # Vector normal (sentido antihorario respecto a la pared)
+        normal_x = -wall_dy
+        normal_y = wall_dx
+        # Punto medio del segmento
+        mid_x = (seg.a.x + seg.b.x) / 2
+        mid_y = (seg.a.y + seg.b.y) / 2
+        # Vector desde el punto medio hacia el jugador
+        to_player_x = player_pos.x - mid_x
+        to_player_y = player_pos.y - mid_y
+        # Producto escalar entre la normal y el vector al jugador
+        dot = normal_x * to_player_x + normal_y * to_player_y
+
+        # La pared es visible si:
+        # - interior_facing=True y dot > 0 (jugador en la cara interior)
+        # - interior_facing=False y dot < 0 (jugador en la cara exterior)
+        # Es decir, el signo de dot debe coincidir con interior_facing
+        return (dot > 0) == seg.interior_facing

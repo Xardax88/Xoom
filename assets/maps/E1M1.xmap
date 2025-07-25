@@ -1,38 +1,40 @@
 # Mapa en L con columna central
 # Formato del mapa:
-# POLY world wall_tex ceiling_text floor_tex H(altura del poligono)
-# p n x y h1 h2
+# <tipo> <nombre> <altura> <textura_pared> <textura_suelo(opcional)> <textura_techo(opcional)>
+# cord_x, cord_y, h1, h2
+# cord_x, cord_y, h1, h2
+# ...
+# END
 #
-# p : Variable que se usa para definir si esa coordenadas corresponde una pared solida, un portal o una puerta
-# n : normal del vertice
-# x y : Coordenadas del vertice
+# cord_x, y : Coordenadas del vertice
 # h1: altura del suelo
 # h2: altura del techo
 
 PLAYER_START -90 90
 
 # Rectángulo exterior (L)
-POLY world0 floor_placeholder 50
--150 -100
-100 -100
-100 0
-0 0
-0 100
--150 100
+POLY room0 50 wall_placeholder floor_placeholder ceiling_placeholder
+-150 -100 0 0
+100 -100 0 0
+100 0 0 0
+0 0 0 0
+0 100 0 0
+-150 100 0 0
 END
 
 # Habitación desnivelada
-POLY world1 wall_placeholder 50
-100 -100
-200 -100
-200 0
-100 0
+POLY room1 50 wall_placeholder
+100 -100 0 0
+200 -100 0 0
+200 0 0 0
+100 0 0 0
 END
 
 # Columna central (cuadrado pequeño)
-POLY column wall_placeholder 80
--80 20
--40 20
--40 -20
--80 -20
+POLY column0 80 wall_placeholder
+
+-40 20 0 0
+-40 -20 0 0
+-80 -20 0 0
+-80 20 0 0
 END

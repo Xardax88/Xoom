@@ -33,6 +33,7 @@ class FileMapLoader(IMapLoader):
 
         segments: List[Segment] = []
         polygons: Dict[str, List[Vec2]] = {}
+        polygon_floor_textures: Dict[str, str] = {}
         player_start_position: Optional[Vec2] = None
 
         try:
@@ -58,60 +59,81 @@ class FileMapLoader(IMapLoader):
                 i += 1
                 continue
 
-            if parts[0].upper() == "SEG":
-                if len(parts) != 5:
-                    raise MapLoadError(f"Línea SEG inválida: {lines[i]}")
-                x1, y1, x2, y2 = map(float, parts[1:])
-                segments.append(Segment(Vec2(x1, y1), Vec2(x2, y2)))
-                i += 1
-                continue
-
-            if parts[0].upper() == "POLY":
-                # POLY <name> [texture] [height]
-                name = parts[1] if len(parts) > 1 else f"poly_{len(polygons)}"
-                texture_name = parts[2] if len(parts) > 2 else None
+            # --- Nuevo formato de POLY y SEG ---
+            if parts[0].upper() in ("POLY", "SEG"):
+                tipo = parts[0].upper()
+                name = parts[1] if len(parts) > 1 else f"{tipo.lower()}_{len(polygons)}"
+                # Nuevo formato: <TIPO> <nombre> <altura> <textura_pared> <textura_suelo(opcional)> <textura_techo(opcional)>
                 try:
-                    height = float(parts[3]) if len(parts) > 3 else None
+                    height = float(parts[2]) if len(parts) > 2 else None
                 except ValueError:
-                    raise MapLoadError(f"Altura inválida para el polígono {name}")
+                    raise MapLoadError(f"Altura inválida para {tipo} {name}")
 
-                pts: List[Vec2] = []
+                texture_wall = parts[3] if len(parts) > 3 else None
+                # Si no hay textura de suelo, usar la de pared
+                texture_floor = parts[4] if len(parts) > 4 else texture_wall
+                # Si no hay textura de techo, usar la de pared
+                texture_ceil = parts[5] if len(parts) > 5 else texture_wall
+
+                # Leer vértices hasta END
+                verts = []
                 i += 1
                 while i < len(lines) and lines[i].upper() != "END":
-                    xy = lines[i].split()
-                    if len(xy) != 2:
-                        raise MapLoadError(f"Línea de punto inválida en polígono {name}: {lines[i]}")
-                    pts.append(Vec2(float(xy[0]), float(xy[1])))
+                    vparts = lines[i].replace(",", " ").split()
+                    if len(vparts) < 2:
+                        raise MapLoadError(f"Línea de vértice inválida en {tipo} {name}: {lines[i]}")
+                    try:
+                        x = float(vparts[0])
+                        y = float(vparts[1])
+                        # t y b por ahora no se usan, pero se leen para el futuro
+                        t = float(vparts[2]) if len(vparts) > 2 else 0.0
+                        b = float(vparts[3]) if len(vparts) > 3 else 0.0
+                    except Exception as e:
+                        raise MapLoadError(f"Coordenadas de vértice inválidas en {tipo} {name}: {lines[i]}") from e
+                    verts.append(Vec2(x, y))
                     i += 1
                 if i == len(lines):
-                    raise MapLoadError(f"Polígono {name} sin END")
+                    raise MapLoadError(f"{tipo} {name} sin END")
 
-                if len(pts) >= 2:
+                if tipo == "POLY":
                     # Guardar los vértices del polígono
-                    polygons[name] = pts
-
-                    # --- CORRECCIÓN CLAVE ---
-                    # Un polígono CCW (is_clockwise=False) es una habitación, sus caras miran hacia adentro.
-                    # Un polígono CW (is_clockwise=True) es un sólido, sus caras miran hacia afuera.
-                    # Por lo tanto, 'interior_facing' debe ser el opuesto de 'is_clockwise'.
-                    is_interior = not is_clockwise(pts)
-
-                    poly_segments = self._create_segments_from_poly(
-                        vertices=pts,
-                        polygon_name=name,
-                        interior_facing=is_interior,
-                        texture_name=texture_name,
-                        height=height,
-                    )
-                    segments.extend(poly_segments)
-
-                i += 1  # saltar END
+                    if len(verts) >= 3:
+                        polygons[name] = verts
+                        # Guardar la textura de suelo asociada al polígono
+                        polygon_floor_textures[name] = texture_floor
+                        # Determinar orientación para interior_facing según convención:
+                        # - Horario: interior_facing=True (columnas, pilares)
+                        # - Antihorario: interior_facing=False (habitaciones, áreas transitables)
+                        from utils.math_utils import is_clockwise
+                        is_interior = is_clockwise(verts)
+                        # CORRECCIÓN: invertir para habitaciones (antihorario)
+                        poly_segments = self._create_segments_from_poly(
+                            vertices=verts,
+                            polygon_name=name,
+                            interior_facing=is_interior,
+                            texture_name=texture_wall,
+                            height=height,
+                        )
+                        segments.extend(poly_segments)
+                elif tipo == "SEG":
+                    # Un segmento es solo dos puntos
+                    if len(verts) == 2:
+                        seg = Segment(
+                            a=verts[0],
+                            b=verts[1],
+                            interior_facing=True,  # Por defecto
+                            texture_name=texture_wall,
+                            height=height,
+                            polygon_name= name,
+                        )
+                        segments.append(seg)
+                i += 1  # Saltar END
                 continue
 
             raise MapLoadError(f"Token desconocido: {parts[0]}")
 
-        # Crear MapData con segmentos y polígonos
-        md = MapData(segments=segments, polygons=polygons)
+        # Crear MapData con segmentos, polígonos y texturas de suelo
+        md = MapData(segments=segments, polygons=polygons, polygon_floor_textures=polygon_floor_textures)
 
         if player_start_position:
             md.player_start = player_start_position
@@ -135,6 +157,9 @@ class FileMapLoader(IMapLoader):
         """
         Crea segmentos a partir de una lista de vértices, etiquetándolos
         con el nombre de su polígono padre.
+        Para cumplir la convención:
+        - Polígonos en sentido horario (columnas): segmentos CCW, interior_facing=True.
+        - Polígonos en sentido antihorario (habitaciones): segmentos CW, interior_facing=False.
         """
         segments = []
         if len(vertices) < 2:
@@ -142,21 +167,30 @@ class FileMapLoader(IMapLoader):
 
         cumulative_length = 0.0
 
-        for i in range(len(vertices)):
-            p1 = vertices[i]
-            p2 = vertices[(i + 1) % len(vertices)]
+        n = len(vertices)
+        for i in range(n):
+            if interior_facing:
+                # Columnas: sentido horario, segmento de i a (i+1)
+                p1 = vertices[i]
+                p2 = vertices[(i + 1) % n]
+                facing = True
+            else:
+                # Habitaciones: sentido antihorario, segmento de (i+1) a i (invertido)
+                p1 = vertices[(i + 1) % n]
+                p2 = vertices[i]
+                facing = False
 
             segment = Segment(
                 a=p1,
                 b=p2,
                 u_offset=cumulative_length,
-                interior_facing=interior_facing,
+                interior_facing=facing,
                 texture_name=texture_name,
                 height=height,
                 polygon_name=polygon_name,
             )
-            segments.append(segment)
             cumulative_length += segment.length()
+            segments.append(segment)
 
         return segments
 
@@ -174,4 +208,3 @@ class FileMapLoader(IMapLoader):
                 logger.debug(f"Textura precargada: {texture_name}")
             except FileNotFoundError:
                 logger.warning(f"No se pudo cargar la textura: {texture_name}")
-

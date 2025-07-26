@@ -1,5 +1,5 @@
-[Inglish 🇺🇸](README.md) /
-[Español 🇦🇷](README.ES.mdES)
+[English 🇺🇸](README.md) /
+[Español 🇦🇷](README.ES.md)
 # Xoom - Doom-Style Engine in Python 🐍
 
 A 3D "raycasting" game engine inspired by classics like Doom, implemented in Python and OpenGL.
@@ -85,6 +85,7 @@ Make sure you have Python 3.11 or higher installed.
 
 ### Controls
 
+In-game
 - W: Move forward
 - S: Move backward
 - A: Turn left
@@ -93,17 +94,28 @@ Make sure you have Python 3.11 or higher installed.
 - E: Strafe right
 - ESC: Exit the game
 
+In the main menu
+- Enter: Select option
+- Esc: Exit the game
+- ↑: Move up
+- ↓: Move down
+- ←: Not implemented
+- →: Not implemented
+
 ### Roadmap
 
 - [x] Load maps from .xmap files
 - [x] BSP Tree construction
 - [x] 3D wall rendering
-  - [x] Rendering with GLSL shaders
+  - [x] Rendering with GLSL shaders and textures
   - [x] Apply textures to walls
 - [x] Player movement and collisions
-- [ ] Render floors and ceilings with textures
+- [x] Rendering with GLSL shaders and textures
+- [x] Basic main menu
+- [ ] Implement "Portal" sectors
+- [ ] Implement per-vertex textures
 - [ ] Implement sprites for enemies and objects
-- [ ] Lighting system (sectors with different brightness)
+- [ ] Lighting system
 - [ ] Add sound effects and music
 - [ ] Port the renderer to Vulkan
 
@@ -111,15 +123,30 @@ Check the open issues for a complete list of proposed features (and known bugs).
 
 ### Map Format
 
-Maps are defined in .xmap files. The syntax is simple and text-based.
-- Comments: Any line starting with # is ignored.
-- PLAYER_START: Defines the initial X Y position and angle A of the player.
-- POLY: Defines a polygon. Syntax is POLY <name> <texture> <height>.
+```
+# XMAP Format:
+# Lines starting with # are comments and ignored by the parser.
+#
+SECTOR <floor_h> <ceil_h>
+    TEXTURES <texture_wall> <texture_floor(optional)> <texture_ceil(optional)>
+    <cord_x> <cord_y>
+    <cord_x> <cord_y>
+    ...
+END
 
-Vertices are listed below, one per line, and closed with END.
-- Clockwise polygons are considered interior walls (Columns).
-- Counterclockwise polygons define exterior areas (Rooms).
-- SEG: Defines a line segment (an individual wall). Syntax is SEG <name> <texture> <height>.
+# Each sector is defined by SECTOR ... END and contains:
+# floor_h: Sector floor height
+# ceil_h: Sector ceiling height
+# cord_x, cord_y: Vertex coordinates
+# A TEXTURES subsection with the sector's textures, where:
+# texture_wall: Wall texture for the sector
+# texture_floor: Floor texture (if not specified, wall texture is used)
+# texture_ceil: Ceiling texture (if not specified, wall texture is used)
+
+PLAYER_START <x> <y> <ang>
+# x, y: Player initial position
+# ang: Player initial angle (in degrees)
+```
 
 ## License
 

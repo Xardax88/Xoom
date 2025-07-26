@@ -11,6 +11,7 @@ BASE_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = BASE_DIR / "assets"
 MAPS_DIR = ASSETS_DIR / "maps"
 TEXTURE_DIR = ASSETS_DIR / "textures"
+FONTS_DIR = ASSETS_DIR / "fonts"
 LOGS_DIR = BASE_DIR / "logs"
 
 # Archivo de mapa por defecto

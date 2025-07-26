@@ -12,7 +12,6 @@ Luego usa logging.getLogger(__name__) en tus módulos.
 """
 
 import logging
-import logging.handlers
 from pathlib import Path
 import settings
 
@@ -20,6 +19,10 @@ _CONFIGURED = False
 
 
 def configure_logging(force: bool = False) -> None:
+    """
+    Configura el logging para que el archivo de log se sobrescriba en cada inicio.
+    Elimina cualquier rotación y asegura que el archivo se borre y se cree de nuevo.
+    """
     global _CONFIGURED
     if _CONFIGURED and not force:
         return
@@ -29,28 +32,18 @@ def configure_logging(force: bool = False) -> None:
 
     log_file = log_dir / settings.LOG_FILE_BASENAME
 
-    handlers = []
-    if settings.LOG_ROTATE_DAILY:
-        handler = logging.handlers.TimedRotatingFileHandler(
-            filename=log_file,
-            when="midnight",
-            backupCount=settings.LOG_BACKUP_COUNT,
-            encoding="utf-8",
-            utc=False,
-        )
-    else:
-        handler = logging.FileHandler(log_file, encoding="utf-8")
-    handlers.append(handler)
+    # El modo 'w' sobrescribe el archivo de log cada vez que se inicia el programa.
+    file_handler = logging.FileHandler(log_file, mode="w", encoding="utf-8")
 
     # También salida a consola
-    console = logging.StreamHandler()
-    handlers.append(console)
+    console_handler = logging.StreamHandler()
 
+    # Configuración básica del logging
     logging.basicConfig(
         level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
         format=settings.LOG_FORMAT,
         datefmt=settings.DATE_FORMAT,
-        handlers=handlers,
+        handlers=[file_handler, console_handler],
         force=True,  # asegura reconfiguración
     )
     _CONFIGURED = True

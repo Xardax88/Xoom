@@ -5,20 +5,101 @@ UIRenderer: Módulo para renderizar la interfaz de usuario (UI) en OpenGL.
 from OpenGL.GL import *
 import numpy as np
 import ctypes
+from PIL import Image, ImageDraw, ImageFont
+import settings
+import os
+
+
+class TextTextureManager:
+    """
+    Encapsula la lógica para crear y gestionar texturas OpenGL a partir de texto TTF usando Pillow.
+    Cumple con SOLID y DRY, y es fácilmente reutilizable.
+    """
+
+    def __init__(self, font_path: str, font_size: int):
+        if not os.path.exists(font_path):
+            raise FileNotFoundError(f"Fuente TTF no encontrada: {font_path}")
+        self.font = ImageFont.truetype(font_path, font_size)
+        self._texture_cache = {}
+
+    def get_text_texture(self, text: str, color=(0, 0, 0, 255)) -> tuple:
+        """
+        Devuelve (tex_id, width, height) para el texto dado.
+        Usa caché para evitar recrear texturas.
+        Corrige la orientación vertical y añade margen para evitar cortes.
+        Ajusta el margen inferior usando ascent y descent para evitar recorte por debajo.
+        """
+        key = (text, color)
+        if key in self._texture_cache:
+            return self._texture_cache[key]
+
+        # Medir el tamaño del texto usando textbbox
+        dummy_img = Image.new("RGBA", (1, 1))
+        draw = ImageDraw.Draw(dummy_img)
+        text_bbox = draw.textbbox((0, 0), text, font=self.font)
+        width = text_bbox[2] - text_bbox[0]
+        height = text_bbox[3] - text_bbox[1]
+
+        # Obtener ascent y descent de la fuente para ajustar el margen inferior
+        ascent, descent = self.font.getmetrics()
+        # Añadir margen superior e inferior (10% del alto visual)
+        margin_top = int(height * 0.1)
+        margin_bottom = int(height * 0.1 + descent)
+
+        img_w = width
+        img_h = height + margin_top + margin_bottom
+
+        # Crear imagen con fondo transparente y márgenes
+        img = Image.new("RGBA", (img_w, img_h), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        # Dibujar el texto desplazado hacia abajo por el margen superior
+        draw.text((0, margin_top), text, font=self.font, fill=color)
+
+        # Invertir la imagen verticalmente para que OpenGL la muestre correctamente
+        img = img.transpose(Image.FLIP_TOP_BOTTOM)
+
+        img_data = img.tobytes("raw", "RGBA", 0, -1)
+        tex_id = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D, tex_id)
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RGBA,
+            img_w,
+            img_h,
+            0,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            img_data,
+        )
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glBindTexture(GL_TEXTURE_2D, 0)
+
+        self._texture_cache[key] = (tex_id, img_w, img_h)
+        return tex_id, img_w, img_h
+
+    def cleanup(self):
+        """
+        Libera todas las texturas generadas.
+        """
+        for tex_id, _, _ in self._texture_cache.values():
+            glDeleteTextures([tex_id])
+        self._texture_cache.clear()
 
 
 class UIRenderer:
+    """
+    Renderizador de la interfaz de usuario, incluyendo botones con texto TTF usando shaders y texturas.
+    """
+
     def __init__(self, renderer):
-        """
-        Inicializa el renderizador de UI, creando los recursos de OpenGL necesarios.
-        """
         self.renderer = renderer
         self.shader = getattr(self.renderer, "ui_button_shader_program", None)
 
-        # Geometría de un quad (cuadrado) de 1x1. Lo reutilizaremos para todos los botones.
+        # Geometría de un quad reutilizable para todos los botones
         quad_vertices = np.array(
             [
-                # positions
                 0.0,
                 1.0,  # Top-left
                 0.0,
@@ -30,51 +111,45 @@ class UIRenderer:
             ],
             dtype=np.float32,
         )
-
         indices = np.array([0, 1, 2, 0, 2, 3], dtype=np.uint32)
 
-        # Crear Vertex Array Object (VAO), Vertex Buffer Object (VBO), y Element Buffer Object (EBO)
         self.quad_vao = glGenVertexArrays(1)
         self.quad_vbo = glGenBuffers(1)
         self.quad_ebo = glGenBuffers(1)
 
         glBindVertexArray(self.quad_vao)
-
         glBindBuffer(GL_ARRAY_BUFFER, self.quad_vbo)
         glBufferData(
             GL_ARRAY_BUFFER, quad_vertices.nbytes, quad_vertices, GL_STATIC_DRAW
         )
-
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.quad_ebo)
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
-
-        # Definir el layout de los atributos de vértice
         glVertexAttribPointer(
             0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(ctypes.c_float), ctypes.c_void_p(0)
         )
         glEnableVertexAttribArray(0)
-
-        # Desvincular para evitar modificaciones accidentales
         glBindBuffer(GL_ARRAY_BUFFER, 0)
         glBindVertexArray(0)
 
+        # Inicializar el gestor de texturas de texto
+        font_path = str(settings.FONTS_DIR / "hack_nerd.ttf")
+        self.text_texture_manager = TextTextureManager(font_path, 36)
+
     def draw_main_menu(self, options, selected_index):
         """
-        Dibuja el menú principal usando shaders, matrices y un único VAO.
+        Dibuja el menú principal con botones y texto TTF centrado usando shaders y texturas.
         """
         width, height = self.renderer.width, self.renderer.height
 
-        # Limpiar la pantalla
-        glDisable(GL_DEPTH_TEST)  # La UI no necesita test de profundidad
+        # Limpiar la pantalla y configurar OpenGL para UI
+        glDisable(GL_DEPTH_TEST)
         glDisable(GL_CULL_FACE)
         glClearColor(0.1, 0.1, 0.1, 1.0)
         glClear(GL_COLOR_BUFFER_BIT)
 
-        # Activar el shader de la UI
         glUseProgram(self.shader)
 
-        # Crear una matriz de proyección ortográfica
-        # Esto mapea las coordenadas de píxeles de la pantalla a las coordenadas de OpenGL (-1 a 1)
+        # Matriz de proyección ortográfica
         projection = np.array(
             [
                 [2.0 / width, 0, 0, -1],
@@ -84,55 +159,86 @@ class UIRenderer:
             ],
             dtype=np.float32,
         ).T
-
         glUniformMatrix4fv(
             glGetUniformLocation(self.shader, "projection"), 1, GL_FALSE, projection
         )
 
-        # Parámetros de los botones
         btn_w, btn_h = 300, 60
         spacing = 40
         start_y = height / 2 - (len(options) * (btn_h + spacing) - spacing) / 2
 
-        # Vincular el VAO del quad que vamos a reutilizar
         glBindVertexArray(self.quad_vao)
 
         for i, opt in enumerate(options):
             x = (width - btn_w) / 2
             y = start_y + i * (btn_h + spacing)
 
-            # Crear la matriz de modelo para este botón específico
-            # Escalar nuestro quad de 1x1 al tamaño del botón
+            # Matriz de modelo para escalar y posicionar el botón
             scale_matrix = np.diag([btn_w, btn_h, 1, 1]).astype(np.float32)
-            # Mover el quad escalado a su posición en la pantalla
             trans_matrix = np.identity(4, dtype=np.float32)
             trans_matrix[3, 0] = x
             trans_matrix[3, 1] = y
-
             model = scale_matrix @ trans_matrix
-
             glUniformMatrix4fv(
                 glGetUniformLocation(self.shader, "model"), 1, GL_FALSE, model
             )
 
-            # Invertir los colores de selección
+            # Color de fondo del botón
+            # CORREGIDO: El botón seleccionado ahora es blanco, los demás son grises
             if i == selected_index:
-                color = (0.5, 0.5, 0.5)  # Gris para el seleccionado
+                color = (1.0, 1.0, 1.0)  # Blanco para el seleccionado
             else:
-                color = (1.0, 1.0, 1.0)  # Blanco para los no seleccionados
-
+                color = (0.5, 0.5, 0.5)  # Gris para los no seleccionados
             glUniform3f(glGetUniformLocation(self.shader, "objectColor"), *color)
 
-            # Dibujar el quad (6 vértices del EBO)
+            # --- Renderizado del texto como textura ---
+            if isinstance(opt, str):
+                text = opt
+            elif hasattr(opt, "label"):
+                text = opt.label
+            else:
+                text = str(opt)
+
+            # Generar textura del texto
+            tex_id, tex_w, tex_h = self.text_texture_manager.get_text_texture(
+                text, color=(0, 0, 0, 255)
+            )
+
+            # Calcular posición y tamaño del texto relativo al botón
+            text_scale_x = tex_w / btn_w
+            text_scale_y = tex_h / btn_h
+            # Offset para centrar el texto en el quad del botón (en espacio local [0,1])
+            offset_x = (1.0 - text_scale_x) / 2.0
+            offset_y = (1.0 - text_scale_y) / 2.0
+
+            # Pasar uniforms para el shader
+            glActiveTexture(GL_TEXTURE0)
+            glBindTexture(GL_TEXTURE_2D, tex_id)
+            glUniform1i(glGetUniformLocation(self.shader, "textTexture"), 0)
+            glUniform1i(glGetUniformLocation(self.shader, "useTexture"), 1)
+            glUniform2f(
+                glGetUniformLocation(self.shader, "textOffset"), offset_x, offset_y
+            )
+            glUniform2f(
+                glGetUniformLocation(self.shader, "textScale"),
+                text_scale_x,
+                text_scale_y,
+            )
+
+            # Dibujar el botón con textura de texto
             glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, None)
 
-        # Desvincular todo
+            # Limpiar estado para el siguiente botón
+            glBindTexture(GL_TEXTURE_2D, 0)
+            glUniform1i(glGetUniformLocation(self.shader, "useTexture"), 0)
+
         glBindVertexArray(0)
         glUseProgram(0)
 
     def cleanup(self):
         """
-        Libera los recursos de OpenGL (VAO, VBO, EBO) cuando ya no se necesiten.
+        Libera los recursos de OpenGL (VAO, VBO, EBO) y texturas de texto.
         """
         glDeleteVertexArrays(1, [self.quad_vao])
         glDeleteBuffers(1, [self.quad_vbo, self.quad_ebo])
+        self.text_texture_manager.cleanup()

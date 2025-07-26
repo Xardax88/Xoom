@@ -73,7 +73,7 @@ Asegúrate de tener instalado Python 3.11 o una versión superior.
     cd Xoom
     ```
 
-2. Ejecuta el script de instalación para instalar las dependencias:
+2. Ejecuta el script para instalar las dependencias:
     ```bash
     python -m pip install -r requirements.txt
     ```
@@ -85,6 +85,7 @@ Asegúrate de tener instalado Python 3.11 o una versión superior.
 
 ### Controles
 
+En el juego
 - W: Mover adelante
 - S: Mover atrás
 - A: Girar a la izquierda
@@ -92,6 +93,14 @@ Asegúrate de tener instalado Python 3.11 o una versión superior.
 - Q: Desplazamiento lateral (strafe) a la izquierda
 - E: Desplazamiento lateral (strafe) a la derecha
 - ESC: Salir del juego
+
+En el menú principal
+- Enter: Seleccionar opción
+- Esc: Salir del juego
+- ↑: Subir opción
+- ↓: Bajar opción
+- ←: No implementado
+- →: No implementado
 
 ### Roadmap
 
@@ -101,11 +110,12 @@ Asegúrate de tener instalado Python 3.11 o una versión superior.
   - [x] Renderizado mediante shaders GLSL con texturas
   - [x] Aplicar texturas a las paredes
 - [x] Movimiento y colisiones del jugador
-- [x] Renderizar suelos
-  - [x] Renderizado mediante shaders GLSL con texturas
-- [ ] Renderizar techos
+- [x] Renderizado mediante shaders GLSL con texturas
+- [x] Menú principal basico
+- [ ] Implementar sectores "Portal" 
+- [ ] Implementar texturas por vertices
 - [ ] Implementar sprites para enemigos y objetos
-- [ ] Sistema de iluminación (sectores con diferente brillo)
+- [ ] Sistema de iluminación
 - [ ] Añadir efectos de sonido y música
 - [ ] Portar el renderizador a Vulkan
 
@@ -113,15 +123,30 @@ Consulta los issues abiertos para una lista completa de las características pro
 
 ### Formato de Mapas
 
-Los mapas se definen en archivos .xmap. La sintaxis es simple y basada en texto.
-- Comentarios: Cualquier línea que empiece con # es ignorada.
-- PLAYER_START: Define la posición inicial X Y y el ángulo A del jugador.
-- POLY: Define un polígono. La sintaxis es POLY <nombre> <textura> <altura>. 
+```
+# Formato del XMAP:
+# El # indica un comentario y es ignorado por el parser.
+#
+SECTOR <floor_h> <ceil_h>
+    TEXTURES <texture_wall> <texture_floor(optional)> <texture_ceil(optional)>
+    <cord_x> <cord_y>
+    <cord_x> <cord_y>
+    ...
+END
 
-Los vértices se listan a continuación, uno por línea, y se cierra con END.
-- Los polígonos en sentido horario se consideran paredes interiores (Columnas).
-- Los polígonos en sentido anti-horario definen áreas exteriores (Habitaciones).
-- SEG: Define un segmento de línea (una pared individual). La sintaxis es SEG <nombre> <textura> <altura>.
+# Cada sector de define por un SECTOR, y termina en un END, y contiene:
+# floor_h: Altura del suelo del sector
+# ceil_h: Altura del techo del sector
+# cord_x, cord_y : Coordenadas del vertice
+# Una sub seccion TEXTURES que tiene las texturas del sector, donde:
+# texture_wall: Textura de las paredes del sector
+# texture_floor: Textura del suelo del sector y si no se especifica, se usa la textura de la pared
+# texture_ceil: Textura del techo del sector y si no se especifica, se usa la textura de la pared
+
+PLAYER_START <x> <y> <ang>
+# x, y: Posición inicial del jugador
+# ang: Ángulo inicial del jugador (en grados)
+```
 
 ## Licencia
 

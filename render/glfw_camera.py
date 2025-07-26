@@ -1,5 +1,6 @@
 """
-Cámara 2D para gestionar la vista en el mundo del juego.
+Camera2D: Gestión de la cámara 2D para OpenGL con GLFW.
+    Esta clase permite manejar la vista 2D, aplicar transformaciones y centrar la cámara en un objetivo.
 """
 
 from __future__ import annotations

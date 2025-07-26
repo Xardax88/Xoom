@@ -1,6 +1,4 @@
 """
-settings.py
-
 Configuraciones globales del proyecto Xoom.
 
 Edita estos valores para ajustar la ventana, FPS, archivo de mapa, FOV del jugador, etc.

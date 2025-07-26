@@ -1,12 +1,16 @@
 """
-Módulo de detección de colisiones para un árbol BSP.
+CollisionDetector: Módulo de detección de colisiones para un árbol BSP.
 Detecta colisiones considerando el radio del jugador como un círculo.
+
+Nota: Los segmentos con blocks_collision=False no bloquean el movimiento ni la visibilidad,
+permitiendo portales y pasos visuales entre sectores con distintas alturas.
 """
 
-from core.types import Vec2
+from core._types import Vec2
 from core.bsp import BSPNode
 from utils.math_utils import line_side
 import math
+
 
 class CollisionDetector:
     """
@@ -16,9 +20,13 @@ class CollisionDetector:
 
     def __init__(self, bsp_root: BSPNode):
         self.bsp_root = bsp_root
-        self.last_collided_segment = None  # Guarda el último segmento con el que se colisionó
+        self.last_collided_segment = (
+            None  # Guarda el último segmento con el que se colisionó
+        )
 
-    def find_first_collision(self, start: Vec2, end: Vec2, radius: float = 0.0) -> Vec2 | None:
+    def find_first_collision(
+        self, start: Vec2, end: Vec2, radius: float = 0.0
+    ) -> Vec2 | None:
         """
         Busca la primera colisión entre el trayecto de un círculo (jugador) y los muros del BSP.
         Además, guarda el segmento con el que se colisionó para sliding.
@@ -32,7 +40,12 @@ class CollisionDetector:
             if node is None or node.partition is None:
                 return
             for seg in node.coplanar:
-                pt = self.segment_moving_circle_collision(start, end, seg.a, seg.b, radius)
+                # Solo considerar segmentos que bloquean colisión
+                if hasattr(seg, "blocks_collision") and not seg.blocks_collision:
+                    continue
+                pt = self.segment_moving_circle_collision(
+                    start, end, seg.a, seg.b, radius
+                )
                 if pt is not None and self.is_between(start, end, pt):
                     collisions.append((pt, seg))
             side_start = line_side(start, node.partition.a, node.partition.b)
@@ -49,7 +62,10 @@ class CollisionDetector:
         if not collisions:
             return None
         # Seleccionar el punto de colisión más cercano al inicio
-        pt, seg = min(collisions, key=lambda pair: (pair[0].x - start.x) ** 2 + (pair[0].y - start.y) ** 2)
+        pt, seg = min(
+            collisions,
+            key=lambda pair: (pair[0].x - start.x) ** 2 + (pair[0].y - start.y) ** 2,
+        )
         self.last_collided_segment = seg  # Guardar el segmento para sliding
         return pt
 
@@ -85,11 +101,13 @@ class CollisionDetector:
             ny /= nlen
 
             # Distancia inicial desde el círculo al segmento (proyectado en la normal)
-            dist0 = ((p1.x - q1.x) * nx + (p1.y - q1.y) * ny)
-            dist1 = ((p2.x - q1.x) * nx + (p2.y - q1.y) * ny)
+            dist0 = (p1.x - q1.x) * nx + (p1.y - q1.y) * ny
+            dist1 = (p2.x - q1.x) * nx + (p2.y - q1.y) * ny
 
             # Si el círculo cruza el segmento (en la normal)
-            if (dist0 > radius and dist1 < radius) or (dist0 < -radius and dist1 > -radius):
+            if (dist0 > radius and dist1 < radius) or (
+                dist0 < -radius and dist1 > -radius
+            ):
                 # Calculamos el t donde ocurre la colisión
                 t = (dist0 - radius) / (dist0 - dist1)
                 if 0.0 <= t <= 1.0:
@@ -97,7 +115,9 @@ class CollisionDetector:
                     col_x = p1.x + d.x * t
                     col_y = p1.y + d.y * t
                     # Verificamos si el punto proyectado cae dentro del segmento
-                    proj = ((col_x - q1.x) * (q2.x - q1.x) + (col_y - q1.y) * (q2.y - q1.y)) / seg_len2
+                    proj = (
+                        (col_x - q1.x) * (q2.x - q1.x) + (col_y - q1.y) * (q2.y - q1.y)
+                    ) / seg_len2
                     if 0.0 <= proj <= 1.0:
                         col_points.append(Vec2(col_x, col_y))
 
@@ -169,4 +189,7 @@ class CollisionDetector:
         # Verifica si el punto p está entre a y b (con margen)
         minx, maxx = sorted([a.x, b.x])
         miny, maxy = sorted([a.y, b.y])
-        return minx - margin <= p.x <= maxx + margin and miny - margin <= p.y <= maxy + margin
+        return (
+            minx - margin <= p.x <= maxx + margin
+            and miny - margin <= p.y <= maxy + margin
+        )

@@ -1,10 +1,10 @@
 """
-Tipos básicos y utilitarios para Xoom.
+Tipos básicos y utilitarios para el Engine.
 """
 
 from __future__ import annotations
 import math
-from dataclasses import dataclass, replace as dataclass_replace
+from dataclasses import dataclass, replace as dataclass_replace, field
 from typing import Tuple, Optional
 
 
@@ -35,6 +35,12 @@ class Vec2:
 
 @dataclass(frozen=True)
 class Segment:
+    """
+    Representa un segmento de pared o límite en el mapa.
+    El atributo blocks_collision indica si este segmento bloquea el movimiento (colisión).
+    Si blocks_collision es False, el segmento es solo visual (no bloquea ni colisión ni visibilidad).
+    """
+
     a: Vec2
     b: Vec2
     # opcionalmente metadatos: interior/exterior, sector id, etc.
@@ -42,7 +48,9 @@ class Segment:
     u_offset: float = 0.0
     texture_name: str | None = None
     height: float | None = None
-    original_segment: Optional["Segment"] = None
+    original_segment: Optional["Segment"] = field(
+        default=None, compare=False, hash=False
+    )
     polygon_name: Optional[str] = None
     # --- NUEVO: atributos para soporte de portales ---
     portal_section: str = None  # "top", "bottom" o None
@@ -50,6 +58,7 @@ class Segment:
     portal_h1_b: float = 0.0
     portal_h2_a: float = 0.0
     portal_h2_b: float = 0.0
+    blocks_collision: bool = True  # <--- Añadido para control de colisión
 
     def __post_init__(self):
         """

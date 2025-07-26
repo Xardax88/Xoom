@@ -8,7 +8,7 @@ from typing import Dict, Any, Iterable, Optional
 
 from core.map_data import MapData
 from core.player import Player
-from core.types import Segment
+from core._types import Segment
 
 
 class IRenderer(ABC):

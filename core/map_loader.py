@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List, Optional, Dict
 import logging
 
-from .types import Vec2, Segment
+from ._types import Vec2, Segment
 from utils.math_utils import is_clockwise
 from .map_data import MapData
 from .errors import MapLoadError
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class IMapLoader(ABC):
     """Interfaz para cargadores de mapas."""
+
     @abstractmethod
     def load(self, path: Path) -> MapData:  # pragma: no cover - interface
         ...
@@ -23,10 +24,19 @@ class IMapLoader(ABC):
 
 class FileMapLoader(IMapLoader):
     """Implementación que lee un archivo de texto .xmap."""
+
     def __init__(self, texture_manager=None):
         self.texture_manager = texture_manager
 
     def load(self, path: Path) -> MapData:
+        """
+        Carga un mapa en el nuevo formato:
+        - SECTOR <floor_h> <ceil_h>
+            TEXTURES <textura_pared> <textura_suelo> <textura_techo>
+            x y
+            ...
+        - Solo se generan paredes exteriores y paredes de separación si floor_h o ceil_h difieren entre sectores.
+        """
         if not path.exists():
             raise MapLoadError(f"No se encuentra el archivo de mapa: {path}")
         logger.info("Cargando mapa desde %s", path)
@@ -34,165 +44,239 @@ class FileMapLoader(IMapLoader):
         segments: List[Segment] = []
         polygons: Dict[str, List[Vec2]] = {}
         polygon_floor_textures: Dict[str, str] = {}
+        sector_floor_h: Dict[str, float] = {}
+        sector_ceil_h: Dict[str, float] = {}
         player_start_position: Optional[Vec2] = None
 
         try:
             with path.open("r", encoding="utf-8") as f:
-                lines = [ln.strip() for ln in f if ln.strip() and not ln.strip().startswith('#')]
+                lines = [
+                    ln.strip()
+                    for ln in f
+                    if ln.strip() and not ln.strip().startswith("#")
+                ]
         except Exception as exc:  # noqa: BLE001
             raise MapLoadError(str(exc)) from exc
 
         i = 0
+        sector_count = 0
+        sector_vertices = {}
+        sector_wall_tex = {}
+        sector_floor_tex = {}
+        sector_ceil_tex = {}
+
         while i < len(lines):
             parts = lines[i].split()
 
+            # --- PLAYER_START ---
             if parts[0].upper() == "PLAYER_START":
-                if len(parts) != 3:
+                if len(parts) < 3:
                     raise MapLoadError(f"Línea PLAYER_START inválida")
                 if player_start_position is not None:
-                    logger.warning("Multiples PLAYER_START en el mapa, se usara la primera.")
+                    logger.warning(
+                        "Multiples PLAYER_START en el mapa, se usara la primera."
+                    )
                 try:
-                    px, py = map(float, parts[1:])
+                    px, py = map(float, parts[1:3])
                     player_start_position = Vec2(px, py)
                 except ValueError as e:
-                    raise MapLoadError(f"Coordenadas de PLAYER_START inválidas: {parts[0]}") from e
+                    raise MapLoadError(
+                        f"Coordenadas de PLAYER_START inválidas: {parts[0]}"
+                    ) from e
                 i += 1
                 continue
 
-            # --- Nuevo formato de POLY y SEG ---
-            if parts[0].upper() in ("POLY", "SEG"):
-                tipo = parts[0].upper()
-                name = parts[1] if len(parts) > 1 else f"{tipo.lower()}_{len(polygons)}"
-                # Nuevo formato: <TIPO> <nombre> <altura> <textura_pared> <textura_suelo(opcional)> <textura_techo(opcional)>
+            # --- SECTOR ---
+            if parts[0].upper() == "SECTOR":
+                # Formato: SECTOR <floor_h> <ceil_h>
+                if len(parts) < 3:
+                    raise MapLoadError(f"Línea SECTOR inválida: {lines[i]}")
                 try:
-                    height = float(parts[2]) if len(parts) > 2 else None
-                except ValueError:
-                    raise MapLoadError(f"Altura inválida para {tipo} {name}")
+                    floor_h = float(parts[1])
+                    ceil_h = float(parts[2])
+                except Exception as e:
+                    raise MapLoadError(
+                        f"Valores numéricos inválidos en SECTOR: {lines[i]}"
+                    ) from e
 
-                texture_wall = parts[3] if len(parts) > 3 else None
-                # Si no hay textura de suelo, usar la de pared
-                texture_floor = parts[4] if len(parts) > 4 else texture_wall
-                # Si no hay textura de techo, usar la de pared
-                texture_ceil = parts[5] if len(parts) > 5 else texture_wall
-
-                # Leer vértices hasta END
+                wall_texture = None
+                floor_texture = None
+                ceil_texture = None
                 verts = []
                 i += 1
+
+                # Buscar TEXTURES y vértices
                 while i < len(lines) and lines[i].upper() != "END":
-                    vparts = lines[i].replace(",", " ").split()
-                    if len(vparts) < 2:
-                        raise MapLoadError(f"Línea de vértice inválida en {tipo} {name}: {lines[i]}")
-                    try:
-                        x = float(vparts[0])
-                        y = float(vparts[1])
-                        # t y b por ahora no se usan, pero se leen para el futuro
-                        t = float(vparts[2]) if len(vparts) > 2 else 0.0
-                        b = float(vparts[3]) if len(vparts) > 3 else 0.0
-                    except Exception as e:
-                        raise MapLoadError(f"Coordenadas de vértice inválidas en {tipo} {name}: {lines[i]}") from e
-                    verts.append(Vec2(x, y))
+                    line = lines[i]
+                    if line.upper().startswith("TEXTURES"):
+                        tex_parts = line.split()
+                        wall_texture = tex_parts[1] if len(tex_parts) > 1 else None
+                        floor_texture = tex_parts[2] if len(tex_parts) > 2 else None
+                        ceil_texture = tex_parts[3] if len(tex_parts) > 3 else None
+                    else:
+                        # Coordenadas de vértice: x y
+                        vparts = line.replace(",", " ").split()
+                        if len(vparts) < 2:
+                            raise MapLoadError(
+                                f"Línea de vértice inválida en SECTOR: {line}"
+                            )
+                        try:
+                            x = float(vparts[0])
+                            y = float(vparts[1])
+                        except Exception as e:
+                            raise MapLoadError(
+                                f"Coordenadas de vértice inválidas en SECTOR: {line}"
+                            ) from e
+                        verts.append(Vec2(x, y))
                     i += 1
                 if i == len(lines):
-                    raise MapLoadError(f"{tipo} {name} sin END")
+                    raise MapLoadError(f"SECTOR sin END")
 
-                if tipo == "POLY":
-                    # Guardar los vértices del polígono
-                    if len(verts) >= 3:
-                        polygons[name] = verts
-                        # Guardar la textura de suelo asociada al polígono
-                        polygon_floor_textures[name] = texture_floor
-                        # Determinar orientación para interior_facing según convención:
-                        # - Horario: interior_facing=True (columnas, pilares)
-                        # - Antihorario: interior_facing=False (habitaciones, áreas transitables)
-                        from utils.math_utils import is_clockwise
-                        is_interior = is_clockwise(verts)
-                        # CORRECCIÓN: invertir para habitaciones (antihorario)
-                        poly_segments = self._create_segments_from_poly(
-                            vertices=verts,
-                            polygon_name=name,
-                            interior_facing=is_interior,
-                            texture_name=texture_wall,
-                            height=height,
-                        )
-                        segments.extend(poly_segments)
-                elif tipo == "SEG":
-                    # Un segmento es solo dos puntos
-                    if len(verts) == 2:
-                        seg = Segment(
-                            a=verts[0],
-                            b=verts[1],
-                            interior_facing=True,  # Por defecto
-                            texture_name=texture_wall,
-                            height=height,
-                            polygon_name= name,
-                        )
-                        segments.append(seg)
+                # Guardar polígono y texturas
+                sector_name = f"sector_{sector_count}"
+                sector_count += 1
+                if len(verts) >= 3:
+                    polygons[sector_name] = verts
+                    polygon_floor_textures[sector_name] = floor_texture or wall_texture
+                    # NUEVO: guardar textura de techo y altura de techo
+                    if ceil_texture:
+                        if "polygon_ceil_textures" not in locals():
+                            polygon_ceil_textures = {}
+                        polygon_ceil_textures[sector_name] = ceil_texture
+                    sector_vertices[sector_name] = verts
+                    sector_floor_h[sector_name] = floor_h
+                    sector_ceil_h[sector_name] = ceil_h
+                    sector_wall_tex[sector_name] = wall_texture
+                    sector_floor_tex[sector_name] = floor_texture
+                    sector_ceil_tex[sector_name] = ceil_texture
                 i += 1  # Saltar END
                 continue
 
             raise MapLoadError(f"Token desconocido: {parts[0]}")
 
-        # Crear MapData con segmentos, polígonos y texturas de suelo
-        md = MapData(segments=segments, polygons=polygons, polygon_floor_textures=polygon_floor_textures)
+        # --- Generación de segmentos exteriores y paredes entre sectores ---
+        # Creamos un índice de bordes: (v1, v2) -> [(sector, idx)]
+        edge_index: Dict[tuple, list] = {}
+        for sector, verts in sector_vertices.items():
+            n = len(verts)
+            for idx in range(n):
+                v1 = verts[idx]
+                v2 = verts[(idx + 1) % n]
+                key = tuple(sorted([(v1.x, v1.y), (v2.x, v2.y)]))
+                edge_index.setdefault(key, []).append((sector, idx))
+
+        # Limpiamos la lista de segmentos para solo agregar los correctos
+        segments = []
+
+        for key, refs in edge_index.items():
+            if len(refs) == 1:
+                # --- Pared exterior: solo un sector tiene este borde ---
+                sector, idx = refs[0]
+                verts = sector_vertices[sector]
+                n = len(verts)
+                v1 = verts[idx]
+                v2 = verts[(idx + 1) % n]
+                wall_tex = sector_wall_tex[sector]
+                floor_h = sector_floor_h[sector]
+                ceil_h = sector_ceil_h[sector]
+                # Siempre exterior: interior_facing=False y sentido antihorario (v1 -> v2)
+                segment = Segment(
+                    a=v1,
+                    b=v2,
+                    interior_facing=False,  # Exterior: normal hacia fuera del sector
+                    texture_name=wall_tex,
+                    height=ceil_h - floor_h,
+                    polygon_name=sector,
+                    portal_h1_a=floor_h,
+                    portal_h1_b=floor_h,
+                    portal_h2_a=ceil_h,
+                    portal_h2_b=ceil_h,
+                )
+                segments.append(segment)
+            elif len(refs) == 2:
+                # --- Borde compartido entre dos sectores ---
+                (sectorA, idxA), (sectorB, idxB) = refs
+                vertsA = sector_vertices[sectorA]
+                vertsB = sector_vertices[sectorB]
+                nA = len(vertsA)
+                nB = len(vertsB)
+                vA1 = vertsA[idxA]
+                vA2 = vertsA[(idxA + 1) % nA]
+                vB1 = vertsB[idxB]
+                vB2 = vertsB[(idxB + 1) % nB]
+                # Emparejar extremos por cercanía
+                if (
+                    abs(vA1.x - vB2.x) < 1e-4
+                    and abs(vA1.y - vB2.y) < 1e-4
+                    and abs(vA2.x - vB1.x) < 1e-4
+                    and abs(vA2.y - vB1.y) < 1e-4
+                ):
+                    vB1, vB2 = vB2, vB1
+
+                # Alturas de suelo y techo en cada sector
+                floorA = sector_floor_h[sectorA]
+                ceilA = sector_ceil_h[sectorA]
+                floorB = sector_floor_h[sectorB]
+                ceilB = sector_ceil_h[sectorB]
+
+                # Si ambos sectores tienen el mismo floor_h y ceil_h, NO hay pared entre ellos
+                if abs(floorA - floorB) < 1e-4 and abs(ceilA - ceilB) < 1e-4:
+                    continue  # No se genera pared
+
+                # Si floor_h o ceil_h es distinto, crear pared entre ambos sectores con altura de diferencia
+                if not abs(floorA - floorB) < 1e-4 or not abs(ceilA - ceilB) < 1e-4:
+                    # La pared va desde el floor menor al floor mayor, hasta el menor ceil
+                    min_floor = min(floorA, floorB)
+                    max_floor = max(floorA, floorB)
+                    min_ceil = min(ceilA, ceilB)
+                    max_ceil = max(ceilA, ceilB)
+                    if min_ceil <= min_floor:
+                        continue  # No hay espacio para pared
+                    wall_tex = sector_wall_tex[sectorA] or sector_wall_tex[sectorB]
+                    # La altura de la pared es la diferencia de floor_h o ceil_h
+                    wall_height = min(max_ceil, min_ceil) - min_floor
+                    # El segmento se dibuja en la posición del borde compartido
+                    step_segment = Segment(
+                        a=vA1,
+                        b=vA2,
+                        interior_facing=False,
+                        texture_name=wall_tex,
+                        height=wall_height,
+                        polygon_name=f"{sectorA}_to_{sectorB}_step",
+                        portal_section=None,
+                        portal_h1_a=min_floor,
+                        portal_h1_b=min_floor,
+                        portal_h2_a=min_ceil,
+                        portal_h2_b=min_ceil,
+                    )
+                    segments.append(step_segment)
+
+        # Crear MapData con los segmentos correctos
+        md = MapData(
+            segments=segments,
+            polygons=polygons,
+            polygon_floor_textures=polygon_floor_textures,
+            polygon_ceil_textures=locals().get("polygon_ceil_textures", {}),
+        )
+        md.sector_floor_h = sector_floor_h
+        md.sector_ceil_h = sector_ceil_h
 
         if player_start_position:
             md.player_start = player_start_position
             logger.info("Posición del jugador: %s", player_start_position)
         else:
-            logger.info("No se encontró la posición del jugador en el mapa. Se usará la posición (0, 0).")
+            logger.info(
+                "No se encontró la posición del jugador en el mapa. Se usará la posición (0, 0)."
+            )
 
         self._preload_textures(md.segments)
 
-        logger.info("Mapa: %s segmentos y %s polígonos cargados.", len(md.segments), len(md.polygons))
+        logger.info(
+            "Mapa: %s segmentos y %s polígonos cargados.",
+            len(md.segments),
+            len(md.polygons),
+        )
         return md
-
-    def _create_segments_from_poly(
-            self,
-            vertices: list[Vec2],
-            polygon_name: str,
-            interior_facing: bool,
-            texture_name: Optional[str] = None,
-            height: Optional[float] = None,
-    ) -> list[Segment]:
-        """
-        Crea segmentos a partir de una lista de vértices, etiquetándolos
-        con el nombre de su polígono padre.
-        Para cumplir la convención:
-        - Polígonos en sentido horario (columnas): segmentos CCW, interior_facing=True.
-        - Polígonos en sentido antihorario (habitaciones): segmentos CW, interior_facing=False.
-        """
-        segments = []
-        if len(vertices) < 2:
-            return segments
-
-        cumulative_length = 0.0
-
-        n = len(vertices)
-        for i in range(n):
-            if interior_facing:
-                # Columnas: sentido horario, segmento de i a (i+1)
-                p1 = vertices[i]
-                p2 = vertices[(i + 1) % n]
-                facing = True
-            else:
-                # Habitaciones: sentido antihorario, segmento de (i+1) a i (invertido)
-                p1 = vertices[(i + 1) % n]
-                p2 = vertices[i]
-                facing = False
-
-            segment = Segment(
-                a=p1,
-                b=p2,
-                u_offset=cumulative_length,
-                interior_facing=facing,
-                texture_name=texture_name,
-                height=height,
-                polygon_name=polygon_name,
-            )
-            cumulative_length += segment.length()
-            segments.append(segment)
-
-        return segments
 
     def _preload_textures(self, segments: List[Segment]) -> None:
         """

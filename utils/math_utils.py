@@ -4,7 +4,7 @@ Funciones matemáticas auxiliares.
 
 from __future__ import annotations
 from typing import Iterable, List
-from core.types import Vec2, Segment
+from core._types import Vec2, Segment
 import math
 
 

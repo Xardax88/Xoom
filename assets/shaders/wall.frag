@@ -1,4 +1,4 @@
-#version 330 core
+#version 460 core
 uniform sampler2D wallTexture;
 in vec2 texCoord;
 out vec4 fragColor;

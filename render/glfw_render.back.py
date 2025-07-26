@@ -1,6 +1,6 @@
 """
 render/glfw_render.py
-Renderizador que utiliza GLFW para la ventana y PyOpenGL para el renderizado 2D del minimapa.
+Renderizador que utiliza GLFW para la ventana y PyOpenGL para el renderizado 2D del minimapa
 """
 
 from __future__ import annotations

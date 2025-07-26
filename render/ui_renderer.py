@@ -1,5 +1,5 @@
 """
-UI Renderer for GLFW OpenGL Application using modern OpenGL.
+UIRenderer: Módulo para renderizar la interfaz de usuario (UI) en OpenGL.
 """
 
 from OpenGL.GL import *
@@ -13,7 +13,7 @@ class UIRenderer:
         Inicializa el renderizador de UI, creando los recursos de OpenGL necesarios.
         """
         self.renderer = renderer
-        self.shader = renderer.ui_shader_program
+        self.shader = getattr(self.renderer, "ui_button_shader_program", None)
 
         # Geometría de un quad (cuadrado) de 1x1. Lo reutilizaremos para todos los botones.
         quad_vertices = np.array(

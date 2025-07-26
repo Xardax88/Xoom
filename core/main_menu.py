@@ -1,5 +1,5 @@
 '''
-Menu principal del juego. Permite al usuario seleccionar entre jugar o salir.
+MainMenu: Menu principal del juego. Permite al usuario seleccionar entre jugar o salir.
 '''
 
 from typing import Optional

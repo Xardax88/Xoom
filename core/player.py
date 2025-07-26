@@ -5,7 +5,7 @@ Definición del jugador.
 from __future__ import annotations
 from dataclasses import dataclass
 import math
-from .types import Vec2
+from ._types import Vec2
 
 
 @dataclass
@@ -42,8 +42,12 @@ class Player:
         a1 = math.radians(self.angle_deg - half)
         a2 = math.radians(self.angle_deg + half)
         return (
-            Vec2(self.x + math.cos(a1) * self.fov_length,
-                 self.y + math.sin(a1) * self.fov_length),
-            Vec2(self.x + math.cos(a2) * self.fov_length,
-                 self.y + math.sin(a2) * self.fov_length),
+            Vec2(
+                self.x + math.cos(a1) * self.fov_length,
+                self.y + math.sin(a1) * self.fov_length,
+            ),
+            Vec2(
+                self.x + math.cos(a2) * self.fov_length,
+                self.y + math.sin(a2) * self.fov_length,
+            ),
         )

@@ -1,13 +1,14 @@
 """
 Construcción de BSP Tree 2D.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional, Sequence
 import logging
 import random
 
-from .types import Segment, Vec2
+from ._types import Segment, Vec2
 from utils.math_utils import split_segment
 from .errors import BSPBuildError
 
@@ -21,6 +22,9 @@ class BSPNode:
     coplanar: List[Segment] = field(default_factory=list)
     front: Optional["BSPNode"] = None
     back: Optional["BSPNode"] = None
+    map_data: "MapData" = (
+        None  # Referencia al MapData asociado para visibilidad y lógica de juego
+    )
 
     def is_leaf(self) -> bool:
         return self.partition is None and not self.front and not self.back
@@ -34,6 +38,7 @@ class BSPBuilder:
         max_depth (int): Profundidad máxima del árbol. Por defecto 32.
         strategy (str): Estrategia de selección de partición. Puede ser "first" o "random".
     """
+
     def __init__(self, max_depth: int = 32, strategy: str = "first") -> None:
         self.max_depth = max_depth
         self.strategy = strategy
@@ -75,13 +80,17 @@ class BSPBuilder:
                 continue
 
             if front_parts:
-                front_list.extend([s.replace(a=part.a, b=part.b) for part in front_parts])
+                front_list.extend(
+                    [s.replace(a=part.a, b=part.b) for part in front_parts]
+                )
                 # front_list.extend(front_parts)
             if back_parts:
                 back_list.extend([s.replace(a=part.a, b=part.b) for part in back_parts])
                 # back_list.extend(back_parts)
 
         # recursión
-        node.front = self._build_recursive(front_list, depth + 1) if front_list else None
+        node.front = (
+            self._build_recursive(front_list, depth + 1) if front_list else None
+        )
         node.back = self._build_recursive(back_list, depth + 1) if back_list else None
         return node

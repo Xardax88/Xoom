@@ -1,6 +1,6 @@
 """
-render/glfw_render.py
-Renderizador que utiliza GLFW para la ventana y PyOpenGL para el renderizado 2D del minimapa.
+GLFW_OpenGLRenderer: Control de renderizado usando GLFW y OpenGL.
+Esta clase gestiona la ventana, el contexto OpenGL y el renderizado del mundo 3D y UI.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from .renderer_base import IRenderer
 from core.map_data import MapData
 from core.player import Player
 import settings
-from core.types import Segment, Vec2
+from core._types import Segment, Vec2
 from . import colors
 from core.visibility import VisibilityManager
 
@@ -78,19 +78,46 @@ class GLFW_OpenGLRenderer(IRenderer):
             raise RuntimeError("Fallo al compilar los shaders OpenGL") from e
 
     def _init_shaders(self):
-        """Inicializa todos los programas de shaders necesarios."""
-        logger.info("Compilando shaders de pared...")
-        self.shader_program = self._compile_shader_program(
-            "assets/shaders/wall.vert", "assets/shaders/wall.frag"
-        )
-        logger.info("Compilando shaders de suelo...")
-        self.floor_shader_program = self._compile_shader_program(
-            "assets/shaders/floor.vert", "assets/shaders/floor.frag"
-        )
-        logger.info("Compilando shaders de UI...")
-        self.ui_shader_program = self._compile_shader_program(
-            "assets/shaders/ui_button.vert", "assets/shaders/ui_button.frag"
-        )
+        """
+        Inicializa todos los programas de shaders necesarios de forma eficiente y extensible.
+        Utiliza una lista de definiciones para evitar repetición y facilitar la extensión.
+        """
+        # Definición de los shaders a compilar: (atributo, vert_path, frag_path, descripción)
+        shader_defs = [
+            (
+                "shader_program",
+                "assets/shaders/wall.vert",
+                "assets/shaders/wall.frag",
+                "pared",
+            ),
+            (
+                "floor_shader_program",
+                "assets/shaders/floor.vert",
+                "assets/shaders/floor.frag",
+                "suelo",
+            ),
+            (
+                "ceiling_shader_program",
+                "assets/shaders/ceiling.vert",
+                "assets/shaders/ceiling.frag",
+                "techo",
+            ),
+            (
+                "ui_button_shader_program",
+                "assets/shaders/ui_button.vert",
+                "assets/shaders/ui_button.frag",
+                "UI_button",
+            ),
+        ]
+
+        for attr, vert, frag, desc in shader_defs:
+            try:
+                logger.info(f"Compilando shaders de {desc}...")
+                program = self._compile_shader_program(vert, frag)
+                setattr(self, attr, program)
+            except Exception as e:
+                logger.error(f"Error al compilar shaders de {desc}: {e}")
+                setattr(self, attr, None)
 
     def __init__(
         self,
@@ -111,6 +138,7 @@ class GLFW_OpenGLRenderer(IRenderer):
         self.texture_manager = TextureManager()
         self.shader_program = None
         self.floor_shader_program = None
+        self.ceiling_shader_program = None  # <-- Añadido para shader de techo
         self.ui_shader_program = None  # <-- Añadimos la propiedad
 
         self.width = width
@@ -218,6 +246,7 @@ class GLFW_OpenGLRenderer(IRenderer):
                 map_data.bsp_root, player
             )
 
+        # Pasar visible_segments a ambos métodos para filtrar suelos y techos
         self.world_renderer.draw_3d_world(player, visible_segments, map_data)
         self.world_renderer.draw_2d_minimap(map_data, player, visible_segments)
 
@@ -233,6 +262,8 @@ class GLFW_OpenGLRenderer(IRenderer):
             glDeleteProgram(self.shader_program)
         if self.floor_shader_program:
             glDeleteProgram(self.floor_shader_program)
+        if self.ceiling_shader_program:
+            glDeleteProgram(self.ceiling_shader_program)
         if self.ui_shader_program:
             glDeleteProgram(self.ui_shader_program)
 

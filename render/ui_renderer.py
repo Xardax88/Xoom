@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 import settings
 import os
 from .ui_label import UILabel
+from .minimap_renderer import MinimapRenderer
 
 
 class TextTextureManager:
@@ -92,6 +93,7 @@ class TextTextureManager:
 class UIRenderer:
     """
     Renderizador de la interfaz de usuario, incluyendo botones con texto TTF usando shaders y texturas.
+    Integra el renderizado del minimapa usando MinimapRenderer, siguiendo SOLID y POO.
     """
 
     def __init__(self, renderer):
@@ -160,6 +162,14 @@ class UIRenderer:
         font_path = str(settings.FONTS_DIR / "hack_nerd.ttf")
         self.text_texture_manager = TextTextureManager(font_path, 36)
         self._font_managers[36] = self.text_texture_manager
+
+        # --- Integración del minimapa ---
+        # Instancia responsable de renderizar el minimapa usando shaders dedicados.
+        # Se recomienda actualizar la textura del mapa y la posición del jugador desde el exterior usando los métodos públicos.
+        self.minimap_renderer = MinimapRenderer()
+        # Ejemplo de cómo asignar la textura del mapa y la posición del jugador:
+        # self.minimap_renderer.set_map_texture(texture_id)
+        # self.minimap_renderer.set_player_position(x_normalized, y_normalized)
 
     def draw_main_menu(self, options, selected_index):
         """
@@ -260,6 +270,10 @@ class UIRenderer:
 
         glBindVertexArray(0)
         glUseProgram(0)
+
+        # Renderiza el minimapa en la UI principal (puedes mover esto a otro método si lo deseas en todo momento)
+        if self.minimap_renderer:
+            self.minimap_renderer.render()
 
     def draw_label(self, label: UILabel, width: int, height: int):
         """

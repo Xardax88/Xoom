@@ -11,7 +11,7 @@ import glfw
 from OpenGL.GL import *
 from OpenGL.GL import shaders
 from core.texture_manager import TextureManager
-from .glfw_camera import Camera2D, MainCamera, HUDCamera
+from .cameras import Camera2D, MainCamera, HUDCamera
 from .world_renderer import WorldRenderer
 from .ui_renderer import UIRenderer
 from .renderer_base import IRenderer
@@ -113,6 +113,12 @@ class GLFW_OpenGLRenderer(IRenderer):
                 "assets/shaders/ui_label.vert",
                 "assets/shaders/ui_label.frag",
                 "UI_label",
+            ),
+            (
+                "minimap_shader_program",
+                "assets/shaders/minimap.vert",
+                "assets/shaders/minimap.frag",
+                "minimapa",
             ),
         ]
 
@@ -321,5 +327,11 @@ class GLFW_OpenGLRenderer(IRenderer):
         if not hasattr(self, "ui_renderer"):
             self.ui_renderer = UIRenderer(self)
         self.ui_renderer.draw_main_menu(options, selected_index)
+
+    def get_minimap_shader_program(self):
+        """
+        Devuelve el shader program del minimapa para ser usado por el MinimapRenderer u otros módulos de UI.
+        """
+        return self.minimap_shader_program
 
     # No se requieren cambios aquí, la lógica de sincronización de FOV y proyección está centralizada en MainCamera y WorldRenderer.

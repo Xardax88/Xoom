@@ -10,15 +10,21 @@ import settings
 
 from OpenGL.GL import *
 from OpenGL.GL import glGetFloatv
-from OpenGL.GL.EXT.texture_filter_anisotropic import GL_TEXTURE_MAX_ANISOTROPY_EXT, GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT
+from OpenGL.GL.EXT.texture_filter_anisotropic import (
+    GL_TEXTURE_MAX_ANISOTROPY_EXT,
+    GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT,
+)
 
 import logging
+
 logger = logging.getLogger(__name__)
+
 
 class TextureManager:
     """
     Gestiona la carga y caché de texturas.
     """
+
     def __init__(self, texture_dir: Path = settings.TEXTURE_DIR):
         self.texture_dir = texture_dir
         self._cache = {}
@@ -60,7 +66,7 @@ class TextureManager:
         glTexImage2D(
             GL_TEXTURE_2D,
             0,
-            GL_COMPRESSED_RGBA,
+            GL_RGBA,
             img.width,
             img.height,
             0,

@@ -141,7 +141,7 @@ class GameRunner:
             # Mostrar menú principal
             menu = MainMenu(self.renderer)
             opcion = menu.show()
-            if opcion != "Jugar":
+            if opcion != "Play":
                 logger.info("Saliendo por menú.")
                 self.renderer.shutdown()
                 return

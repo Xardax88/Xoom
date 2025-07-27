@@ -26,11 +26,14 @@ class VisibilityManager:
         player: Player,
         max_dist: float | None = None,
         clip_to_fov: bool = None,
+        see_through_portals: bool = True,  # Nuevo: permite ver a través de portales
     ) -> List[Segment]:
         """
         Devuelve todos los segmentos (caras) de los polígonos principales que entren parcialmente en el FOV,
         excluyendo aquellos completamente cubiertos por otros más cercanos al jugador.
         El filtrado de oclusión se realiza mediante raycasting desde la posición del jugador.
+
+        Si see_through_portals=True, los segmentos tipo 'portal' no bloquean la visibilidad de otros segmentos detrás.
         """
         # Permite recibir MapData o BSPNode
         if hasattr(map_or_bsp, "segments"):
@@ -66,18 +69,25 @@ class VisibilityManager:
 
         # --- Filtrado de segmentos totalmente cubiertos usando raycasting ---
         filtered_segments = VisibilityManager._filter_occluded_segments_raycast(
-            visible_segments, player, max_dist
+            visible_segments, player, max_dist, see_through_portals=see_through_portals
         )
         return filtered_segments
 
     @staticmethod
     def _filter_occluded_segments_raycast(
-        segments: List[Segment], player: Player, max_dist: float, ray_count: int = 256
+        segments: List[Segment],
+        player: Player,
+        max_dist: float,
+        ray_count: int = 256,
+        see_through_portals: bool = True,  # Nuevo: permite ver a través de portales
     ) -> List[Segment]:
         """
         Filtra los segmentos que están completamente cubiertos por otros usando raycasting.
         Se lanzan rayos desde la posición del jugador en el rango del FOV.
         Solo los segmentos que son impactados primero por al menos un rayo se consideran visibles.
+
+        Si see_through_portals=True, los segmentos tipo 'portal' no bloquean la visibilidad de otros segmentos detrás,
+        pero siguen siendo visibles si están en el FOV.
         """
         if not segments:
             return []
@@ -98,23 +108,25 @@ class VisibilityManager:
             dy = math.sin(ray_angle)
             ray_end = Vec2(pos.x + dx * max_dist, pos.y + dy * max_dist)
 
-            closest_seg = None
-            closest_dist = float("inf")
-            closest_pt = None
-
+            # Buscar todos los segmentos impactados por el rayo, ordenados por distancia
+            hits = []
             for seg in segments:
                 hit = VisibilityManager._segment_ray_intersection(
                     pos, ray_end, seg.a, seg.b
                 )
                 if hit is not None:
                     dist = (hit.x - pos.x) ** 2 + (hit.y - pos.y) ** 2
-                    if dist < closest_dist:
-                        closest_dist = dist
-                        closest_seg = seg
-                        closest_pt = hit
+                    hits.append((dist, seg))
 
-            if closest_seg is not None:
-                segment_hits[closest_seg].add(i)
+            hits.sort()
+            # Marca todos los portales impactados por este rayo como visibles,
+            # y solo el primer sólido impactado (si lo hay)
+            for dist, seg in hits:
+                segment_hits[seg].add(i)
+                if getattr(seg, "wall_type", "solid") != "portal":
+                    # Si es sólido, detén el rayo aquí
+                    break
+                # Si es portal, sigue buscando detrás
 
         # Solo los segmentos impactados por al menos un rayo son visibles
         visible = [seg for seg, rays in segment_hits.items() if rays]

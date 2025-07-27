@@ -12,9 +12,9 @@ from ._types import Vec2
 class Player:
     x: float
     y: float
-    angle_deg: float
     fov_deg: float
     fov_length: float
+    angle_deg: float = 0.0  # El ángulo inicial es opcional y por defecto 0.0
 
     @property
     def pos(self) -> Vec2:

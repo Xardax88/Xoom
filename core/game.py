@@ -33,6 +33,12 @@ class Game:
         if hasattr(self.map_data, "set_bsp_root"):
             self.map_data.set_bsp_root(self.bsp_root)
 
+        # --- Inicializar ángulo del jugador desde el xmap ---
+        # Si el mapa define un ángulo inicial, lo aplicamos al jugador.
+        # Esto permite que el jugador inicie mirando en la dirección deseada según el mapa.
+        if hasattr(self.map_data, "player_start_angle"):
+            self.player.angle_deg = self.map_data.player_start_angle
+
     def run(self) -> None:
         logger.info("Entrando al loop principal.")
         self._running = True

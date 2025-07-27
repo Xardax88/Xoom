@@ -6,6 +6,11 @@ from core.player import Player
 from core.map_data import MapData
 from core._types import Segment
 from render import colors
+from render.glsl_models import (
+    WallModel,
+    FloorModel,
+    CeilingModel,
+)  # <--- Importar modelos GLSL
 import settings
 
 from OpenGL.GL import *
@@ -155,7 +160,6 @@ class WorldRenderer:
             if not poly_vertices or len(poly_vertices) < 3:
                 continue
 
-            # Consultar la textura de suelo del polígono
             floor_texture_name = map_data.polygon_floor_textures.get(poly_name)
             use_texture = floor_texture_name is not None
 
@@ -173,7 +177,6 @@ class WorldRenderer:
                 floor_color_gl = [c / 255.0 for c in floor_color_rgb]
                 glUniform3f(color_loc, *floor_color_gl)
 
-            # Obtener la altura del suelo (floor_h) del sector
             floor_h = 0.0
             if hasattr(map_data, "sector_floor_h"):
                 floor_h = map_data.sector_floor_h.get(poly_name, 0.0)
@@ -184,37 +187,20 @@ class WorldRenderer:
                 vertex_data.extend(
                     [
                         v.x,
-                        floor_h,  # posición Y = altura del suelo
+                        floor_h,
                         v.y,
                         v.x / tex_scale,
                         v.y / tex_scale,
                     ]
                 )
-            vertices = np.array(vertex_data, dtype=np.float32)
+            vertices = np.array(vertex_data, dtype=np.float32).reshape(-1, 5)
 
-            # Creación de VBO y dibujado
-            vbo = glGenBuffers(1)
-            glBindBuffer(GL_ARRAY_BUFFER, vbo)
-            glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
-
+            # Usar FloorModel para encapsular el VBO y el dibujado
+            model = FloorModel(vertices)
             pos_loc = glGetAttribLocation(shader, "position")
-            glEnableVertexAttribArray(pos_loc)
-            glVertexAttribPointer(
-                pos_loc, 3, GL_FLOAT, GL_FALSE, 20, ctypes.c_void_p(0)
-            )
-
             uv_loc = glGetAttribLocation(shader, "texCoordIn")
-            glEnableVertexAttribArray(uv_loc)
-            glVertexAttribPointer(
-                uv_loc, 2, GL_FLOAT, GL_FALSE, 20, ctypes.c_void_p(12)
-            )
-
-            glDrawArrays(GL_TRIANGLE_FAN, 0, len(poly_vertices))
-
-            glDisableVertexAttribArray(pos_loc)
-            glDisableVertexAttribArray(uv_loc)
-            glBindBuffer(GL_ARRAY_BUFFER, 0)
-            glDeleteBuffers(1, [vbo])
+            model.draw(shader, pos_loc, uv_loc)
+            del model  # Libera el VBO
 
         glUseProgram(0)
 
@@ -223,7 +209,6 @@ class WorldRenderer:
         Dibuja el techo de todos los polígonos principales (sectores) usando un shader dedicado para techos.
         El techo se dibuja a la altura ceil_h de cada sector.
         """
-        # Usar un shader dedicado para el techo
         shader = getattr(self.renderer, "ceiling_shader_program", None)
         if not shader or not map_data.polygons:
             return
@@ -247,12 +232,10 @@ class WorldRenderer:
             settings.TEXTURE_SCALE if hasattr(settings, "TEXTURE_SCALE") else 1.0
         )
 
-        # --- Dibuja el techo solo para los polígonos principales ---
         for poly_name, poly_vertices in map_data.polygons.items():
             if not poly_vertices or len(poly_vertices) < 3:
                 continue
 
-            # Buscar la textura de techo si existe
             ceil_texture_name = None
             if hasattr(map_data, "polygon_ceil_textures"):
                 ceil_texture_name = map_data.polygon_ceil_textures.get(poly_name)
@@ -272,58 +255,38 @@ class WorldRenderer:
                 ceil_color_gl = [c / 255.0 for c in ceil_color_rgb]
                 glUniform3f(color_loc, *ceil_color_gl)
 
-            # Obtener la altura del techo (ceil_h) del sector
             ceil_h = 0.0
             if hasattr(map_data, "sector_ceil_h"):
                 ceil_h = map_data.sector_ceil_h.get(poly_name, 0.0)
 
-            # Preparación de Vértices (Posición + UVs)
             vertex_data = []
-            # Para el techo, el sentido debe ser horario para que la cara quede hacia abajo
             for v in poly_vertices:
                 vertex_data.extend(
                     [
                         v.x,
-                        ceil_h,  # posición Y = altura del techo
+                        ceil_h,
                         v.y,
                         v.x / tex_scale,
                         v.y / tex_scale,
                     ]
                 )
-            vertices = np.array(vertex_data, dtype=np.float32)
+            vertices = np.array(vertex_data, dtype=np.float32).reshape(-1, 5)
 
-            vbo = glGenBuffers(1)
-            glBindBuffer(GL_ARRAY_BUFFER, vbo)
-            glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
-
+            # Usar CeilingModel para encapsular el VBO y el dibujado
+            model = CeilingModel(vertices)
             pos_loc = glGetAttribLocation(shader, "position")
-            glEnableVertexAttribArray(pos_loc)
-            glVertexAttribPointer(
-                pos_loc, 3, GL_FLOAT, GL_FALSE, 20, ctypes.c_void_p(0)
-            )
-
             uv_loc = glGetAttribLocation(shader, "texCoordIn")
-            glEnableVertexAttribArray(uv_loc)
-            glVertexAttribPointer(
-                uv_loc, 2, GL_FLOAT, GL_FALSE, 20, ctypes.c_void_p(12)
-            )
-
-            glDrawArrays(GL_TRIANGLE_FAN, 0, len(poly_vertices))
-
-            glDisableVertexAttribArray(pos_loc)
-            glDisableVertexAttribArray(uv_loc)
-            glBindBuffer(GL_ARRAY_BUFFER, 0)
-            glDeleteBuffers(1, [vbo])
+            model.draw(shader, pos_loc, uv_loc)
+            del model
 
         glUseProgram(0)
 
     def _draw_3d_wall(self, seg: Segment, player: Player):
         """
         Dibuja un segmento de pared en 3D solo si la cara visible está orientada hacia el jugador.
-        Utiliza el atributo interior_facing para decidir la orientación.
-        Si interior_facing es True (columnas), la cara visible es la interior (normal hacia fuera).
-        Si interior_facing es False (habitaciones), la cara visible es la exterior (normal hacia dentro).
-        Renderiza correctamente entre floor_h y ceil_h usando los atributos portal_h*.
+        Soporta paredes sólidas y portales (divididas en secciones).
+        Para portales, siempre deja el hueco central (no se dibuja pared sólida nunca),
+        permitiendo la visibilidad a través del portal desde ambos lados, como en Doom clásico.
         """
         # --- Lógica de visibilidad de la cara ---
         wall_dx = seg.b.x - seg.a.x
@@ -332,13 +295,10 @@ class WorldRenderer:
         normal_y = wall_dx
         mid_x = (seg.a.x + seg.b.x) / 2
         mid_y = (seg.a.y + seg.b.y) / 2
-        # Usar player.pos para compatibilidad con el motor
         to_player_x = player.pos.x - mid_x
         to_player_y = player.pos.y - mid_y
         dot = normal_x * to_player_x + normal_y * to_player_y
 
-        # Habitaciones (interior_facing=False): visible si dot > 0
-        # Columnas (interior_facing=True): visible si dot < 0
         visible = True
         if seg.interior_facing is False:
             visible = dot > 0
@@ -361,68 +321,107 @@ class WorldRenderer:
 
         p1, p2 = seg.a, seg.b
 
-        # Usar los valores de portal_h* para definir el quad de la pared
-        y1a = getattr(seg, "portal_h1_a", 0.0)
-        y1b = getattr(seg, "portal_h1_b", 0.0)
-        y2a = getattr(
-            seg,
-            "portal_h2_a",
-            seg.height if seg.height is not None else settings.WALL_HEIGHT,
-        )
-        y2b = getattr(
-            seg,
-            "portal_h2_b",
-            seg.height if seg.height is not None else settings.WALL_HEIGHT,
-        )
+        # --- Renderizado de portales: solo upper y lower, nunca pared sólida ---
+        if getattr(seg, "wall_type", "solid") == "portal" and seg.portal_sections:
+            for section in seg.portal_sections:
+                # Solo dibujar upper y lower, omitir middle (hueco)
+                if section["section"] not in ("top", "bottom"):
+                    continue
 
-        # --- Aplicar TEXTURE_SCALE también al alto de la textura (coordenada V) ---
-        v_start_a = y1a / tex_scale
-        v_start_b = y1b / tex_scale
-        v_end_a = y2a / tex_scale
-        v_end_b = y2b / tex_scale
+                y1a = section["h1_a"]
+                y1b = section["h1_b"]
+                y2a = section["h2_a"]
+                y2b = section["h2_b"]
 
-        vertices = np.array(
-            [
-                [p1.x, y1a, p1.y, u_start, v_start_a],  # Abajo-Izquierda
-                [p2.x, y1b, p2.y, u_end, v_start_b],  # Abajo-Derecha
-                [p2.x, y2b, p2.y, u_end, v_end_b],  # Arriba-Derecha
-                [p1.x, y2a, p1.y, u_start, v_end_a],  # Arriba-Izquierda
-            ],
-            dtype=np.float32,
-        )
+                v_start_a = y1a / tex_scale
+                v_start_b = y1b / tex_scale
+                v_end_a = y2a / tex_scale
+                v_end_b = y2b / tex_scale
 
-        vbo = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+                vertices = np.array(
+                    [
+                        [p1.x, y1a, p1.y, u_start, v_start_a],  # Abajo-Izquierda
+                        [p2.x, y1b, p2.y, u_end, v_start_b],  # Abajo-Derecha
+                        [p2.x, y2b, p2.y, u_end, v_end_b],  # Arriba-Derecha
+                        [p1.x, y2a, p1.y, u_start, v_end_a],  # Arriba-Izquierda
+                    ],
+                    dtype=np.float32,
+                )
+                model = WallModel(vertices, wall_type="solid")
+                pos_loc = glGetAttribLocation(shader, "position")
+                uv_loc = glGetAttribLocation(shader, "texCoordIn")
 
-        pos_loc = glGetAttribLocation(shader, "position")
-        uv_loc = glGetAttribLocation(shader, "texCoordIn")
-        glEnableVertexAttribArray(pos_loc)
-        glVertexAttribPointer(pos_loc, 3, GL_FLOAT, False, 20, ctypes.c_void_p(0))
-        glEnableVertexAttribArray(uv_loc)
-        glVertexAttribPointer(uv_loc, 2, GL_FLOAT, False, 20, ctypes.c_void_p(12))
+                if seg.texture_name:
+                    texture_id = self.renderer.texture_manager.get_gl_texture_id(
+                        seg.texture_name
+                    )
+                    glActiveTexture(GL_TEXTURE0)
+                    glBindTexture(GL_TEXTURE_2D, texture_id)
+                    tex_loc = glGetUniformLocation(shader, "wallTexture")
+                    glUniform1i(tex_loc, 0)
 
-        if seg.texture_name:
-            texture_id = self.renderer.texture_manager.get_gl_texture_id(
-                seg.texture_name
+                modelview = glGetFloatv(GL_MODELVIEW_MATRIX)
+                projection = glGetFloatv(GL_PROJECTION_MATRIX)
+                mv_loc = glGetUniformLocation(shader, "modelview")
+                pr_loc = glGetUniformLocation(shader, "projection")
+                glUniformMatrix4fv(mv_loc, 1, GL_FALSE, modelview)
+                glUniformMatrix4fv(pr_loc, 1, GL_FALSE, projection)
+
+                model.draw(shader, pos_loc, uv_loc)
+                del model  # Libera el VBO
+        else:
+            # Pared sólida (comportamiento actual)
+            y1a = getattr(seg, "portal_h1_a", 0.0)
+            y1b = getattr(seg, "portal_h1_b", 0.0)
+            y2a = getattr(
+                seg,
+                "portal_h2_a",
+                seg.height if seg.height is not None else settings.WALL_HEIGHT,
             )
-            glActiveTexture(GL_TEXTURE0)
-            glBindTexture(GL_TEXTURE_2D, texture_id)
-            tex_loc = glGetUniformLocation(shader, "wallTexture")
-            glUniform1i(tex_loc, 0)
+            y2b = getattr(
+                seg,
+                "portal_h2_b",
+                seg.height if seg.height is not None else settings.WALL_HEIGHT,
+            )
 
-        modelview = glGetFloatv(GL_MODELVIEW_MATRIX)
-        projection = glGetFloatv(GL_PROJECTION_MATRIX)
-        mv_loc = glGetUniformLocation(shader, "modelview")
-        pr_loc = glGetUniformLocation(shader, "projection")
-        glUniformMatrix4fv(mv_loc, 1, GL_FALSE, modelview)
-        glUniformMatrix4fv(pr_loc, 1, GL_FALSE, projection)
+            v_start_a = y1a / tex_scale
+            v_start_b = y1b / tex_scale
+            v_end_a = y2a / tex_scale
+            v_end_b = y2b / tex_scale
 
-        glDrawArrays(GL_QUADS, 0, 4)
-        glDisableVertexAttribArray(pos_loc)
-        glDisableVertexAttribArray(uv_loc)
-        glBindBuffer(GL_ARRAY_BUFFER, 0)
-        glDeleteBuffers(1, [vbo])
+            vertices = np.array(
+                [
+                    [p1.x, y1a, p1.y, u_start, v_start_a],  # Abajo-Izquierda
+                    [p2.x, y1b, p2.y, u_end, v_start_b],  # Abajo-Derecha
+                    [p2.x, y2b, p2.y, u_end, v_end_b],  # Arriba-Derecha
+                    [p1.x, y2a, p1.y, u_start, v_end_a],  # Arriba-Izquierda
+                ],
+                dtype=np.float32,
+            )
+
+            model = WallModel(vertices)
+            pos_loc = glGetAttribLocation(shader, "position")
+            uv_loc = glGetAttribLocation(shader, "texCoordIn")
+
+            if seg.texture_name:
+                texture_id = self.renderer.texture_manager.get_gl_texture_id(
+                    seg.texture_name
+                )
+                glActiveTexture(GL_TEXTURE0)
+                glBindTexture(GL_TEXTURE_2D, texture_id)
+                tex_loc = glGetUniformLocation(shader, "wallTexture")
+                glUniform1i(tex_loc, 0)
+
+            modelview = glGetFloatv(GL_MODELVIEW_MATRIX)
+            projection = glGetFloatv(GL_PROJECTION_MATRIX)
+            mv_loc = glGetUniformLocation(shader, "modelview")
+            pr_loc = glGetUniformLocation(shader, "projection")
+            glUniformMatrix4fv(mv_loc, 1, GL_FALSE, modelview)
+            glUniformMatrix4fv(pr_loc, 1, GL_FALSE, projection)
+
+            model.draw(shader, pos_loc, uv_loc)
+            del model  # Libera el VBO
+
         glUseProgram(0)
 
     def _draw_grid(self):

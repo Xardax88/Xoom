@@ -30,12 +30,7 @@ class FileMapLoader(IMapLoader):
 
     def load(self, path: Path) -> MapData:
         """
-        Carga un mapa en el nuevo formato:
-        - SECTOR <floor_h> <ceil_h>
-            TEXTURES <textura_pared> <textura_suelo> <textura_techo>
-            x y
-            ...
-        - Solo se generan paredes exteriores y paredes de separación si floor_h o ceil_h difieren entre sectores.
+        Carga un mapa desde un archivo de texto .xmap.
         """
         if not path.exists():
             raise MapLoadError(f"No se encuentra el archivo de mapa: {path}")
@@ -47,6 +42,7 @@ class FileMapLoader(IMapLoader):
         sector_floor_h: Dict[str, float] = {}
         sector_ceil_h: Dict[str, float] = {}
         player_start_position: Optional[Vec2] = None
+        player_start_angle: float = 0.0  # Ángulo inicial por defecto
 
         try:
             with path.open("r", encoding="utf-8") as f:
@@ -79,6 +75,9 @@ class FileMapLoader(IMapLoader):
                 try:
                     px, py = map(float, parts[1:3])
                     player_start_position = Vec2(px, py)
+                    # Permitir ángulo opcional: PLAYER_START x y [angle]
+                    if len(parts) >= 4:
+                        player_start_angle = float(parts[3])
                 except ValueError as e:
                     raise MapLoadError(
                         f"Coordenadas de PLAYER_START inválidas: {parts[0]}"
@@ -191,6 +190,7 @@ class FileMapLoader(IMapLoader):
                     portal_h1_b=floor_h,
                     portal_h2_a=ceil_h,
                     portal_h2_b=ceil_h,
+                    wall_type="solid",
                 )
                 segments.append(segment)
             elif len(refs) == 2:
@@ -223,33 +223,72 @@ class FileMapLoader(IMapLoader):
                 if abs(floorA - floorB) < 1e-4 and abs(ceilA - ceilB) < 1e-4:
                     continue  # No se genera pared
 
-                # Si floor_h o ceil_h es distinto, crear pared entre ambos sectores con altura de diferencia
+                # Si floor_h o ceil_h es distinto, crear pared tipo portal
                 if not abs(floorA - floorB) < 1e-4 or not abs(ceilA - ceilB) < 1e-4:
-                    # La pared va desde el floor menor al floor mayor, hasta el menor ceil
+                    # Determinar los valores extremos para dividir la pared en 3 secciones
                     min_floor = min(floorA, floorB)
                     max_floor = max(floorA, floorB)
                     min_ceil = min(ceilA, ceilB)
                     max_ceil = max(ceilA, ceilB)
                     if min_ceil <= min_floor:
                         continue  # No hay espacio para pared
+
                     wall_tex = sector_wall_tex[sectorA] or sector_wall_tex[sectorB]
-                    # La altura de la pared es la diferencia de floor_h o ceil_h
-                    wall_height = min(max_ceil, min_ceil) - min_floor
+                    # Dividir la pared en 3 secciones: superior, central, inferior
+                    # Sección superior: de min_ceil a max_ceil (si hay diferencia)
+                    # Sección central: de max_floor a min_ceil (zona de paso)
+                    # Sección inferior: de min_floor a max_floor (si hay diferencia)
+                    portal_sections = []
+                    # Superior
+                    if abs(max_ceil - min_ceil) > 1e-4:
+                        portal_sections.append(
+                            {
+                                "section": "top",
+                                "h1_a": min_ceil,
+                                "h1_b": min_ceil,
+                                "h2_a": max_ceil,
+                                "h2_b": max_ceil,
+                            }
+                        )
+                    # Central (zona de paso)
+                    portal_sections.append(
+                        {
+                            "section": "middle",
+                            "h1_a": max_floor,
+                            "h1_b": max_floor,
+                            "h2_a": min_ceil,
+                            "h2_b": min_ceil,
+                        }
+                    )
+                    # Inferior
+                    if abs(max_floor - min_floor) > 1e-4:
+                        portal_sections.append(
+                            {
+                                "section": "bottom",
+                                "h1_a": min_floor,
+                                "h1_b": min_floor,
+                                "h2_a": max_floor,
+                                "h2_b": max_floor,
+                            }
+                        )
+
                     # El segmento se dibuja en la posición del borde compartido
-                    step_segment = Segment(
+                    portal_segment = Segment(
                         a=vA1,
                         b=vA2,
                         interior_facing=False,
                         texture_name=wall_tex,
-                        height=wall_height,
-                        polygon_name=f"{sectorA}_to_{sectorB}_step",
-                        portal_section=None,
+                        height=max_ceil - min_floor,
+                        polygon_name=f"{sectorA}_to_{sectorB}_portal",
                         portal_h1_a=min_floor,
                         portal_h1_b=min_floor,
-                        portal_h2_a=min_ceil,
-                        portal_h2_b=min_ceil,
+                        portal_h2_a=max_ceil,
+                        portal_h2_b=max_ceil,
+                        wall_type="portal",
+                        portal_sections=portal_sections,
+                        blocks_collision=False,  # <--- Permite el paso y visibilidad en portales
                     )
-                    segments.append(step_segment)
+                    segments.append(portal_segment)
 
         # Crear MapData con los segmentos correctos
         md = MapData(
@@ -268,6 +307,9 @@ class FileMapLoader(IMapLoader):
             logger.info(
                 "No se encontró la posición del jugador en el mapa. Se usará la posición (0, 0)."
             )
+
+        # --- Guardar el ángulo inicial del jugador en el MapData ---
+        md.player_start_angle = player_start_angle
 
         self._preload_textures(md.segments)
 

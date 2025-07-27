@@ -13,7 +13,7 @@
 #
 # PLAYER_START x y ang
 
-PLAYER_START -90 90 90
+PLAYER_START -140 90 -90
 
 SECTOR 0 50
     TEXTURES wall_placeholder floor_placeholder ceiling_placeholder
@@ -39,7 +39,7 @@ SECTOR 0 50
     -120 0
 END
 
-SECTOR 0 50
+SECTOR 2 40
     TEXTURES wall_placeholder floor_placeholder ceiling_placeholder
     100 -35
     100 -65
@@ -47,7 +47,7 @@ SECTOR 0 50
     110 -35
 END
 
-SECTOR 0 50
+SECTOR 2 50
     TEXTURES wall_placeholder floor_placeholder ceiling_placeholder
     110 0
     110 -35

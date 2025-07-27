@@ -39,6 +39,10 @@ class Segment:
     Representa un segmento de pared o límite en el mapa.
     El atributo blocks_collision indica si este segmento bloquea el movimiento (colisión).
     Si blocks_collision es False, el segmento es solo visual (no bloquea ni colisión ni visibilidad).
+
+    wall_type: Indica si la pared es 'solid' (normal) o 'portal' (dividida en secciones).
+    portal_sections: Solo para wall_type='portal'. Lista de dicts con info de cada sección.
+    NOTA: portal_sections se excluye de hash y comparación para permitir que Segment sea hashable.
     """
 
     a: Vec2
@@ -60,12 +64,22 @@ class Segment:
     portal_h2_b: float = 0.0
     blocks_collision: bool = True  # <--- Añadido para control de colisión
 
+    # --- NUEVO: tipo de pared y secciones de portal ---
+    wall_type: str = "solid"  # 'solid' (normal) o 'portal'
+    # Excluir portal_sections de hash y comparación para evitar errores con listas mutables
+    portal_sections: Optional[list] = field(
+        default=None, compare=False, hash=False, repr=False
+    )
+
     def __post_init__(self):
         """
-        Si no se proporciona un segmento original asigna uno
+        Si no se proporciona un segmento original asigna uno.
+        Si es pared portal y no se definen secciones, inicializa como lista vacía.
         """
         if self.original_segment is None:
             object.__setattr__(self, "original_segment", self)
+        if self.wall_type == "portal" and self.portal_sections is None:
+            object.__setattr__(self, "portal_sections", [])
 
     def length(self) -> float:
         dx = self.b.x - self.a.x

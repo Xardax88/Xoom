@@ -18,7 +18,6 @@ from OpenGL.GLU import gluPerspective
 
 import math
 import numpy as np
-import ctypes
 
 import logging
 
@@ -30,23 +29,22 @@ class WorldRenderer:
         self.renderer = renderer  # Referencia al GLFWOpenGLRenderer
         self.theme = renderer.theme
 
-    def draw_3d_world(
-        self, player: Player, visible_segments: list[Segment], map_data: MapData
-    ):
+    def draw_3d_world(self, camera, visible_segments: list[Segment], map_data: MapData):
         """
         Renderiza el mundo 3D usando los segmentos visibles completos.
-        Además, dibuja las caras del suelo y techo de cada polígono del mapa.
+        Utiliza la posición y ángulo de la cámara principal (no del jugador).
         """
         glEnable(GL_DEPTH_TEST)
         glEnable(GL_CULL_FACE)
-        self._setup_3d_projection(player)
+        self._setup_3d_projection(camera)
 
         glMatrixMode(GL_MODELVIEW)
         glDepthFunc(GL_LESS)
         glLoadIdentity()
 
-        glRotatef(player.angle_deg + 90, 0.0, 1.0, 0.0)
-        glTranslatef(-player.x, -settings.PLAYER_HEIGHT, -player.y)
+        # Usar la posición y ángulo de la cámara principal
+        glRotatef(camera.angle_deg + 90, 0.0, 1.0, 0.0)
+        glTranslatef(-camera.x, -settings.PLAYER_HEIGHT, -camera.z)
 
         # --- Renderizado del mundo ---
         # Dibujar el suelo de los polígonos visibles
@@ -68,7 +66,7 @@ class WorldRenderer:
                 if seg_key in drawn_segments:
                     continue
                 drawn_segments.add(seg_key)
-                self._draw_3d_wall(seg, player)
+                self._draw_3d_wall(seg, camera)
 
         # Dibujar grilla
         # self._draw_grid()
@@ -98,9 +96,11 @@ class WorldRenderer:
         self._draw_map(map_data, visible_segments)
         self._draw_player(player)
 
-    def _setup_3d_projection(self, player: Player) -> None:
+    def _setup_3d_projection(self, camera) -> None:
         """
-        Configura la mastriz para la vista del jugador en 3D.
+        Configura la matriz para la vista de la cámara principal en 3D.
+        El FOV horizontal se toma directamente del atributo fov_deg de la cámara,
+        que debe estar sincronizado con el jugador para evitar desincronización visual.
         """
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
@@ -109,7 +109,9 @@ class WorldRenderer:
         height = self.renderer.height
         aspect_ratio = width / height if height > 0 else 1.0
 
-        horizontal_fov_rad = math.radians(player.fov_deg)
+        # Usar SIEMPRE el FOV de la cámara (ya sincronizado con el jugador)
+        horizontal_fov_deg = getattr(camera, "fov_deg", 90.0)
+        horizontal_fov_rad = math.radians(horizontal_fov_deg)
         vertical_fov_rad = 2 * math.atan(
             math.tan(horizontal_fov_rad / 2) / aspect_ratio
         )
@@ -137,6 +139,10 @@ class WorldRenderer:
             return
 
         glUseProgram(shader)
+
+        # Enviar uniforms de iluminación dinámica (luz puntual y global)
+        self.renderer.point_light.set_uniforms(shader)
+        self.renderer.global_light.set_uniforms(shader)
 
         modelview = glGetFloatv(GL_MODELVIEW_MATRIX)
         projection = glGetFloatv(GL_PROJECTION_MATRIX)
@@ -215,6 +221,10 @@ class WorldRenderer:
 
         glUseProgram(shader)
 
+        # Enviar uniforms de iluminación dinámica (luz puntual y global)
+        self.renderer.point_light.set_uniforms(shader)
+        self.renderer.global_light.set_uniforms(shader)
+
         modelview = glGetFloatv(GL_MODELVIEW_MATRIX)
         projection = glGetFloatv(GL_PROJECTION_MATRIX)
         glUniformMatrix4fv(
@@ -281,12 +291,11 @@ class WorldRenderer:
 
         glUseProgram(0)
 
-    def _draw_3d_wall(self, seg: Segment, player: Player):
+    def _draw_3d_wall(self, seg: Segment, observer):
         """
-        Dibuja un segmento de pared en 3D solo si la cara visible está orientada hacia el jugador.
+        Dibuja un segmento de pared en 3D solo si la cara visible está orientada hacia el observador.
+        El parámetro observer puede ser Player o MainCamera, siempre que tenga .pos.
         Soporta paredes sólidas y portales (divididas en secciones).
-        Para portales, siempre deja el hueco central (no se dibuja pared sólida nunca),
-        permitiendo la visibilidad a través del portal desde ambos lados, como en Doom clásico.
         """
         # --- Lógica de visibilidad de la cara ---
         wall_dx = seg.b.x - seg.a.x
@@ -295,9 +304,9 @@ class WorldRenderer:
         normal_y = wall_dx
         mid_x = (seg.a.x + seg.b.x) / 2
         mid_y = (seg.a.y + seg.b.y) / 2
-        to_player_x = player.pos.x - mid_x
-        to_player_y = player.pos.y - mid_y
-        dot = normal_x * to_player_x + normal_y * to_player_y
+        to_observer_x = observer.pos.x - mid_x
+        to_observer_y = observer.pos.y - mid_y
+        dot = normal_x * to_observer_x + normal_y * to_observer_y
 
         visible = True
         if seg.interior_facing is False:
@@ -312,6 +321,10 @@ class WorldRenderer:
         if not shader:
             return
         glUseProgram(shader)
+
+        # Enviar uniforms de iluminación dinámica (luz puntual y global)
+        self.renderer.point_light.set_uniforms(shader)
+        self.renderer.global_light.set_uniforms(shader)
 
         tex_scale = (
             settings.TEXTURE_SCALE if hasattr(settings, "TEXTURE_SCALE") else 1.0

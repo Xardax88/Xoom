@@ -8,6 +8,7 @@ import ctypes
 from PIL import Image, ImageDraw, ImageFont
 import settings
 import os
+from .ui_label import UILabel
 
 
 class TextTextureManager:
@@ -55,7 +56,7 @@ class TextTextureManager:
         # Dibujar el texto desplazado hacia abajo por el margen superior
         draw.text((0, margin_top), text, font=self.font, fill=color)
 
-        # Invertir la imagen verticalmente para que OpenGL la muestre correctamente
+        # Corregir la orientación vertical del texto
         img = img.transpose(Image.FLIP_TOP_BOTTOM)
 
         img_data = img.tobytes("raw", "RGBA", 0, -1)
@@ -96,18 +97,20 @@ class UIRenderer:
     def __init__(self, renderer):
         self.renderer = renderer
         self.shader = getattr(self.renderer, "ui_button_shader_program", None)
+        self.label_shader = getattr(self.renderer, "ui_label_shader_program", None)
 
-        # Geometría de un quad reutilizable para todos los botones
+        # --- VAO/VBO/EBO para quads genéricos de UI (botones del menú principal) ---
+        # Este quad se usa para los botones del menú principal (draw_main_menu)
         quad_vertices = np.array(
             [
                 0.0,
-                1.0,  # Top-left
+                0.0,  # Inferior izquierda
+                1.0,
+                0.0,  # Inferior derecha
+                1.0,
+                1.0,  # Superior derecha
                 0.0,
-                0.0,  # Bottom-left
-                1.0,
-                0.0,  # Bottom-right
-                1.0,
-                1.0,  # Top-right
+                1.0,  # Superior izquierda
             ],
             dtype=np.float32,
         )
@@ -131,9 +134,32 @@ class UIRenderer:
         glBindBuffer(GL_ARRAY_BUFFER, 0)
         glBindVertexArray(0)
 
-        # Inicializar el gestor de texturas de texto
+        # --- VAO/VBO/EBO para etiquetas HUD ---
+        # Este quad se usa para las etiquetas HUD (draw_label)
+        self.label_vao = glGenVertexArrays(1)
+        self.label_vbo = glGenBuffers(1)
+        self.label_ebo = glGenBuffers(1)
+
+        glBindVertexArray(self.label_vao)
+        glBindBuffer(GL_ARRAY_BUFFER, self.label_vbo)
+        glBufferData(
+            GL_ARRAY_BUFFER, quad_vertices.nbytes, quad_vertices, GL_STATIC_DRAW
+        )
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.label_ebo)
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
+        glVertexAttribPointer(
+            0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(ctypes.c_float), ctypes.c_void_p(0)
+        )
+        glEnableVertexAttribArray(0)
+        glBindBuffer(GL_ARRAY_BUFFER, 0)
+        glBindVertexArray(0)
+
+        # Diccionario para gestionar TextTextureManager por tamaño de fuente
+        self._font_managers = {}
+        # Inicializar el gestor de texturas de texto por defecto (36)
         font_path = str(settings.FONTS_DIR / "hack_nerd.ttf")
         self.text_texture_manager = TextTextureManager(font_path, 36)
+        self._font_managers[36] = self.text_texture_manager
 
     def draw_main_menu(self, options, selected_index):
         """
@@ -235,10 +261,22 @@ class UIRenderer:
         glBindVertexArray(0)
         glUseProgram(0)
 
+    def draw_label(self, label: UILabel, width: int, height: int):
+        """
+        Dibuja una etiqueta HUD usando el shader ui_label_shader_program.
+        Ahora delega toda la lógica a UILabel.draw, cumpliendo SOLID y DRY.
+        """
+        if not self.label_shader:
+            return
+        label.draw(self.label_shader, width, height, self.label_vao)
+
     def cleanup(self):
         """
         Libera los recursos de OpenGL (VAO, VBO, EBO) y texturas de texto.
         """
+        glDeleteVertexArrays(1, [self.label_vao])
+        glDeleteBuffers(1, [self.label_vbo, self.label_ebo])
         glDeleteVertexArrays(1, [self.quad_vao])
         glDeleteBuffers(1, [self.quad_vbo, self.quad_ebo])
-        self.text_texture_manager.cleanup()
+        # Limpiar todas las texturas de las etiquetas
+        UILabel.cleanup_fonts()

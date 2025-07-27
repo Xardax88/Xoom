@@ -5,24 +5,24 @@ Esta clase gestiona la ventana, el contexto OpenGL y el renderizado del mundo 3D
 
 from __future__ import annotations
 import logging
-import math
-import numpy as np
 from typing import Dict, Any, Iterable, Optional
 
 import glfw
 from OpenGL.GL import *
 from OpenGL.GL import shaders
 from core.texture_manager import TextureManager
-from .glfw_camera import Camera2D
+from .glfw_camera import Camera2D, MainCamera, HUDCamera
 from .world_renderer import WorldRenderer
 from .ui_renderer import UIRenderer
 from .renderer_base import IRenderer
+from .ui_label import UILabel
 from core.map_data import MapData
 from core.player import Player
 import settings
-from core._types import Segment, Vec2
+from core._types import Segment
 from . import colors
 from core.visibility import VisibilityManager
+from render.glsl_lights import PointLight, GlobalLight
 
 
 logger = logging.getLogger(__name__)
@@ -108,6 +108,12 @@ class GLFW_OpenGLRenderer(IRenderer):
                 "assets/shaders/ui_button.frag",
                 "UI_button",
             ),
+            (
+                "ui_label_shader_program",
+                "assets/shaders/ui_label.vert",
+                "assets/shaders/ui_label.frag",
+                "UI_label",
+            ),
         ]
 
         for attr, vert, frag, desc in shader_defs:
@@ -138,8 +144,8 @@ class GLFW_OpenGLRenderer(IRenderer):
         self.texture_manager = TextureManager()
         self.shader_program = None
         self.floor_shader_program = None
-        self.ceiling_shader_program = None  # <-- Añadido para shader de techo
-        self.ui_shader_program = None  # <-- Añadimos la propiedad
+        self.ceiling_shader_program = None
+        self.ui_shader_program = None
 
         self.width = width
         self.height = height
@@ -165,7 +171,19 @@ class GLFW_OpenGLRenderer(IRenderer):
         glfw.set_window_size_callback(self.window, self._on_resize)
         self.world_renderer = WorldRenderer(self)
         self.camera = Camera2D(width=width, height=height, scale=scale)
+        self.main_camera = MainCamera()
+        self.hud_camera = HUDCamera(width=width, height=height)
         self._setup_gl(width, height)
+
+        self.point_light = PointLight(
+            position=(-140.0, 20.0, 95.0),
+            color=(1.0, 1.0, 1.0),
+            intensity=30.0,
+            range=150.0,
+        )  # Luz puntual roja en la esquina (0,0)
+        self.global_light = GlobalLight(
+            color=(1.0, 1.0, 1.0), intensity=0.1
+        )  # Luz global blanca suave
 
     def get_opengl_version(self) -> str:
         """Devuelve la version de OpenGL utilizada."""
@@ -188,6 +206,7 @@ class GLFW_OpenGLRenderer(IRenderer):
         self.height = height
         glViewport(0, 0, width, height)
         self.camera.update_viewport(width, height)
+        self.hud_camera.update_viewport(width, height)
 
     # --- Implementación de la interfaz IRenderer ---
 
@@ -233,9 +252,16 @@ class GLFW_OpenGLRenderer(IRenderer):
     ) -> None:
         """
         Orquesta el dibujado del mapa en 3D y del overlay del minimapa 2D.
+        Actualiza la posición de la luz puntual para que siga al jugador antes de renderizar.
         """
         glClearColor(0.0, 0.0, 0.0, 1.0)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+
+        # --- Actualizar la posición de la luz puntual para que siga al jugador ---
+        self.point_light.set(position=(0, 0, 0))
+
+        # --- Sincronizar la cámara principal con el jugador ---
+        self.main_camera.follow_player(player)
 
         if (
             visible_segments is None
@@ -246,9 +272,25 @@ class GLFW_OpenGLRenderer(IRenderer):
                 map_data.bsp_root, player
             )
 
-        # Pasar visible_segments a ambos métodos para filtrar suelos y techos
-        self.world_renderer.draw_3d_world(player, visible_segments, map_data)
+        # --- Renderizado del mundo y minimapa ---
+        self.world_renderer.draw_3d_world(self.main_camera, visible_segments, map_data)
         self.world_renderer.draw_2d_minimap(map_data, player, visible_segments)
+
+        # --- HUD: Mostrar la posición del jugador usando HUDCamera y UILabel ---
+        self.hud_camera.apply_transform()
+        if not hasattr(self, "ui_renderer"):
+            self.ui_renderer = UIRenderer(self)
+        # Crear etiqueta HUD y dibujarla
+
+        label = UILabel(
+            text=f"Pos: x={player.x:.1f} y={player.y:.1f} z={getattr(player, 'z', 0.0):.1f}",
+            x=12,  # self.width - 420,
+            y=12,
+            color=(255, 255, 255, 255),
+            bg_color=(0, 0, 0, 180),
+            font_size=16,
+        )
+        self.ui_renderer.draw_label(label, self.width, self.height)
 
     def dispatch_events(self) -> None:
         glfw.poll_events()
@@ -279,3 +321,5 @@ class GLFW_OpenGLRenderer(IRenderer):
         if not hasattr(self, "ui_renderer"):
             self.ui_renderer = UIRenderer(self)
         self.ui_renderer.draw_main_menu(options, selected_index)
+
+    # No se requieren cambios aquí, la lógica de sincronización de FOV y proyección está centralizada en MainCamera y WorldRenderer.

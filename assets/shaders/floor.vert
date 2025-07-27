@@ -10,6 +10,8 @@ uniform mat4 projection;
 
 // Salida hacia el fragment shader
 out vec2 texCoord;
+// Nueva salida: posición mundial del vértice
+out vec3 fragWorldPos;
 
 void main()
 {
@@ -18,4 +20,6 @@ void main()
 
     // Pasamos las coordenadas de textura directamente
     texCoord = texCoordIn;
+    // Exportar la posición mundial (sin proyección)
+    fragWorldPos = (modelview * vec4(position, 1.0)).xyz;
 }
